@@ -3,6 +3,9 @@ from ControlledSystem import *
 from scipy.optimize import minimize
 from multiprocessing import Pool
 
+work_dir = 'D:\\pycharm.git\\InteractingCMCResearch\\output\\'
+recalculate = False
+
 np.set_printoptions(precision=3, suppress=True)
 
 init = m2v(lb)
@@ -22,33 +25,34 @@ def proc(idx, t, phi):
 delta = 0.01
 T = 1.0
 
-values, controls = load_results('D:\\projects.git\\InteractingCMCResearch\\output\\')
-pics_plots(np.flip(np.arange(T, 0.0-delta/2, -delta)), values, controls, 'D:\\projects.git\\InteractingCMCResearch\\output\\')
+if recalculate:
+    if __name__ == '__main__':
+        pool = Pool(processes=8)
+        phi = terminal(n_states, desirable_state, 2)
+        phi_enumerate = [x[0] for x in list(np.ndenumerate(phi))]
+        time = np.arange(T, 0.0-delta/2, -delta)
+        #time = [1.0]
+        values = np.zeros([time.shape[0]] + n_states)
+        controls = np.zeros([time.shape[0]] + n_states + list(m2v(lb).shape))
 
-# if __name__ == '__main__':
-#     pool = Pool(processes=8)
-#     phi = terminal(n_states, [1, 1, 1], 2)
-#     phi_enumerate = [x[0] for x in list(np.ndenumerate(phi))]
-#     time = np.arange(T, 0.0-delta/2, -delta)
-#     #time = [1.0]
-#     values = np.zeros([time.shape[0]] + n_states)
-#     controls = np.zeros([time.shape[0]] + n_states + list(m2v(lb).shape))
-#
-#
-#     for idt, t in enumerate(time):
-#         slice = pool.map(partial(proc, t=t, phi=phi), phi_enumerate)
-#         phi = phi + delta * slice2dphi(slice)
-#         print(t)
-#         print_slice(slice)
-#         values[len(time)-idt-1,] = phi
-#         controls[len(time)-idt-1,] = slice2U(slice)
-#
-#     save_results(values, controls, 'D:\\projects.git\\InteractingCMCResearch\\output\\')
 
-    #pics_plots(values, controls, 'D:\\projects.git\\InteractingCMCResearch\\output\\')
+        for idt, t in enumerate(time):
+            slice = pool.map(partial(proc, t=t, phi=phi), phi_enumerate)
+            phi = phi + delta * slice2dphi(slice)
+            print(t)
+            print_slice(slice)
+            values[len(time)-idt-1,] = phi
+            controls[len(time)-idt-1,] = slice2U(slice)
+
+        save_results(values, controls, work_dir)
+else:
+    values, controls = load_results(work_dir)
+    pics_plots(np.flip(np.arange(T, 0.0 - delta / 2, -delta)), values, controls, work_dir)
+
+    #pics_plots(values, controls, work_dir)
 
     #print_controls(controls)
-    #pics_slice(results[0.9], 'D:\\projects.git\\InteractingCMCResearch\\output\\')
+    #pics_slice(results[0.9], work_dir)
     #print()
 
 

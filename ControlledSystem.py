@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from BasicCMC import birth_death_generator
 
-n_states = [4,4,4]
+n_states = [7, 7, 7]
+desirable_state = [3, 3, 3]
 
 to_optimize = np.array([[False, True, False], [True, False, True], [False, True, False]])
 lb = np.array([[np.NaN, 0, np.NaN], [0, np.NaN, 0], [np.NaN, 0, np.NaN]])
@@ -136,7 +137,7 @@ def plot_stateandcontrol_3MCs(state, control, path, max_level=3):
     if np.abs(control[1,2]) > tol_to_show:
         ax.arrow(1.75,mid_level,0.5,0, color='red', head_width=0.05)
         ax.text(2.1, mid_level+0.1, f'{control[1,2]:.2f}')
-    ax.set_ylim(0,4)
+    ax.set_ylim(0, max_level+1)
     ax.set_xticks([0.5, 1.5, 2.5])
     ax.set_xticklabels(['1', '2', '3'])
     y_ticks = np.arange(1, max_level+1, 1)
