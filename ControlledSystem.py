@@ -149,7 +149,7 @@ def plot_stateandcontrol_3MCs(state, control, path, max_level=3):
     plt.savefig(f'{path}state_{state[0]}_{state[1]}_{state[2]}.png')
     plt.close(fig)
 
-def plot_value_control(state, times, values, controls,  path):
+def plot_value_control(state, times, values, controls,  path, max_level=3):
     fig = plt.figure(figsize=(6, 6), dpi=200)
     gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1])
     gs.update(left=0.05, bottom=0.07, right=0.98, top=0.99, wspace=0.15, hspace=0.16)
@@ -172,7 +172,7 @@ def plot_value_control(state, times, values, controls,  path):
     x = [state[0]+1, state[0]+1, state[1]+1, state[1]+1, state[2]+1, state[2]+1]
     ax_.fill_between(t,x, alpha=0.5)
     ax_.set_axis_off()
-    ax_.set_ylim(0,4)
+    ax.set_ylim(0, max_level+1)
 
     # tol_to_show = 1e-3
     # if np.abs(control[1,0]) > tol_to_show:
@@ -212,7 +212,7 @@ def pics_slice(slice, path):
 
 def pics_plots(times, values, controls, path):
     for idx, _ in np.ndenumerate(np.zeros(n_states)):
-        plot_value_control(idx, times, values[tuple([slice(None)]+list(idx))], controls[tuple([slice(None)]+list(idx)+[slice(None)])], path)
+        plot_value_control(idx, times, values[tuple([slice(None)]+list(idx))], controls[tuple([slice(None)]+list(idx)+[slice(None)])], path, max_level=np.max(n_states))
 
 
 def save_results(values, controls, path):
