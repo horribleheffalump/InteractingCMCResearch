@@ -12,3 +12,14 @@ def birth_death_generator(dim, lam, mu):
         return a
 
     return generator
+
+
+def cronsum(A):
+    #A - list of matrices
+    res = A[0]
+    Eres = np.eye(A[0].shape[0])
+    for i in range(1, len(A)):
+        Ei = np.eye(A[i].shape[0])
+        res = np.multiply.outer(res, Ei) + np.multiply.outer(Eres, A[i])
+        Eres = np.multiply.outer(Eres, Ei)
+    return res

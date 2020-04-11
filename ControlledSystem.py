@@ -1,12 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-from BasicCMC import birth_death_generator
+from BasicCMC import cronsum
 from numba import jit
 
-n_states = [7, 7, 7]
+n_states = [4, 4, 4]
 np_n_states = np.array(n_states)
-desirable_state = [3, 3, 3]
+desirable_state = [1, 1, 1]
 
 to_optimize = np.array([[False, True, False], [True, False, True], [False, True, False]])
 lb = np.array([[np.NaN, 0, np.NaN], [0, np.NaN, 0], [np.NaN, 0, np.NaN]])
@@ -69,7 +69,7 @@ def omega(i, t):
 
 @jit
 def A(mc_num, t, u_in, u_out):
-    n = np_n_states[0]
+    n = np_n_states[mc_num]
     a = np.zeros((n, n))
     for i in range(1, n):
         a[i, i - 1] = mu(mc_num, t) + omega(mc_num, t) + u_out
@@ -146,7 +146,19 @@ def rhs(t, phi, U):
             select_slice[i] = slice(None)
             select_slice = tuple(select_slice)
             rhs[idx] = rhs[idx] + np.inner(A(i, t, control_in(i, U), control_out(i, U))[:, idx[i]], phi[select_slice])
-    return rhs+f(t, U)
+    rhs = rhs + f(t, U)
+    #rhs2 = rhs_tensor(t, phi, U)
+    #print(np.abs(rhs-rhs2)<1e-10)
+    return rhs
+
+
+def rhs_tensor(t, phi, U):
+    At = [A(i, t, control_in(i, U), control_out(i, U)) for i in range(0, len(n_states))]
+    A_full = cronsum(At)
+    rhs_tensor = np.tensordot(A_full, phi, axes=([0,2,4],[0,1,2]))
+    rhs_tensor = rhs_tensor+f(t, U)
+    return rhs_tensor
+
 
 
 def plot_stateandcontrol_3MCs(state, control, path, max_level=3):

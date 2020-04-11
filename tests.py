@@ -1,11 +1,13 @@
 from functools import partial
+
+from BasicCMC import cronsum
 from ControlledSystem import *
 from scipy.optimize import minimize
 from multiprocessing import Pool
-from time import time, strftime, localtime
+from time import time, strftime, localtime, gmtime
 
-work_dir = 'D:\\pycharm.git\\InteractingCMCResearch\\output\\'
-recalculate = True
+work_dir = 'D:\\projects.git\\InteractingCMCResearch\\output\\'
+recalculate = False
 show_output = False
 
 np.set_printoptions(precision=3, suppress=True)
@@ -21,10 +23,10 @@ consts.append({'type': 'ineq', 'fun': lambda u: -np.abs(v2m(u)[1, 2] * v2m(u)[2,
 
 
 def proc(idx, t, phi):
-    res = minimize(lambda x: rhs(t, phi, v2m(x))[idx], init, bounds=bounds, constraints=consts) #, options={'disp':True}, method='SLSQP')
+    res = minimize(lambda x: rhs_tensor(t, phi, v2m(x))[idx], init, bounds=bounds, constraints=consts) #, options={'disp':True}, method='SLSQP')
     return idx, res.x, res.fun
 
-delta = 0.001
+delta = 0.01
 T = 1.0
 
 if recalculate:
@@ -43,11 +45,11 @@ if recalculate:
             phi = phi + delta * slice2dphi(slice)
             time_elapsed = time() - time_start
             time_step_average = time_elapsed / (idt + 1)
-            time_rest = time_step_average * len(time_mesh)
-            time_finish = time_start + time_rest
-            print(f'step: {t}, elapsed: {time_elapsed}, average step: {time_step_average}, approximate finish time: {strftime("%d %b %Y %H:%M:%S", localtime(time_finish))} ({strftime("%H:%M:%S", localtime(time_rest))} rest)')
+            time_rest = time_step_average * len(time_mesh) - time_elapsed
+            time_finish = time() + time_rest
+            print(f'step: {t}, elapsed: {strftime("%H:%M:%S", gmtime(time_elapsed))}, average step: {time_step_average:.3f} sec, approximate finish time: {strftime("%d %b %Y %H:%M:%S", localtime(time_finish))} ({strftime("%H:%M:%S", gmtime(time_rest))} rest)')
             if show_output:
-                print(slice)
+                print_slice(slice)
             values[len(time_mesh)-idt-1,] = phi
             controls[len(time_mesh)-idt-1,] = slice2U(slice)
 
