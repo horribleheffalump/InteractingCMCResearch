@@ -2,8 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from BasicCMC import birth_death_generator
+from numba import jit
 
 n_states = [7, 7, 7]
+np_n_states = np.array(n_states)
 desirable_state = [3, 3, 3]
 
 to_optimize = np.array([[False, True, False], [True, False, True], [False, True, False]])
@@ -31,20 +33,50 @@ def v2print(u):
                 out = out + f'({i+1}->{j+1}) {U[i,j]:.3f} ({j+1}->{i+1}) {U[j,i]:.3f} '
     return(out)
 
-def lambda_1(t): return -np.cos(2*np.pi*t) + 10
-def lambda_2(t): return -2*np.cos(2*np.pi*t) + 14
-def lambda_3(t): return -0.5*np.cos(2*np.pi*t) + 6
-def mu_1(t): return np.sin(2*np.pi*t + 5/12*np.pi) + 3
-def mu_2(t): return 2*np.sin(2*np.pi*t + 5/12*np.pi) + 6
-def mu_3(t): return 0.5*np.sin(2*np.pi*t + 5/12*np.pi) + 2
-def omega_1(t): return np.sin(2*np.pi*t + 1/4*np.pi) + 7
-def omega_2(t): return 2*np.sin(2*np.pi*t + 1/4*np.pi) + 8
-def omega_3(t): return 0.5*np.sin(2*np.pi*t + 1/4*np.pi) + 4
+@jit
+def lam(i, t):
+    if i == 0:
+        return -np.cos(2*np.pi*t) + 10
+    elif i == 1:
+        return -2*np.cos(2*np.pi*t) + 14
+    elif i == 2:
+        return -0.5*np.cos(2*np.pi*t) + 6
+    else:
+        return np.NaN
+
+@jit
+def mu(i, t):
+    if i == 0:
+        return np.sin(2*np.pi*t + 5/12*np.pi) + 3
+    elif i == 1:
+        return 2*np.sin(2*np.pi*t + 5/12*np.pi) + 6
+    elif i == 2:
+        return  0.5*np.sin(2*np.pi*t + 5/12*np.pi) + 2
+    else:
+        return np.NaN
+
+@jit
+def omega(i, t):
+    if i == 0:
+        return np.sin(2*np.pi*t + 1/4*np.pi) + 7
+    elif i == 1:
+        return 2*np.sin(2*np.pi*t + 1/4*np.pi) + 8
+    elif i == 2:
+        return 0.5*np.sin(2*np.pi*t + 1/4*np.pi) + 4
+    else:
+        return np.NaN
 
 
-A = [birth_death_generator(n_states[0], lambda_1, lambda t: mu_1(t) + omega_1(t)),
-     birth_death_generator(n_states[1], lambda_2, lambda t: mu_2(t) + omega_2(t)),
-     birth_death_generator(n_states[2], lambda_3, lambda t: mu_3(t) + omega_3(t))]
+@jit
+def A(mc_num, t, u_in, u_out):
+    n = np_n_states[0]
+    a = np.zeros((n, n))
+    for i in range(1, n):
+        a[i, i - 1] = mu(mc_num, t) + omega(mc_num, t) + u_out
+        a[i, i] = a[i, i] - a[i, i - 1]
+        a[i - 1, i] = lam(mc_num, t) + u_in
+        a[i - 1, i - 1] = a[i - 1, i - 1] - a[i - 1, i]
+    return a
 
 
 def select_slice_by_dimension(shape, dim, slice_num):
@@ -58,43 +90,43 @@ def control_mask(shape, i1, i2):
     mask[select_slice_by_dimension(shape, i2, -1)] = 0
     return mask
 
-
+@jit
 def control_out(i, U):  # i - MC number
     return np.sum(U[i, :][to_optimize[i, :]])
 
-
+@jit
 def control_in(i, U):  # i - MC number
     return np.sum(U[:, i][to_optimize[:, i]])
 
 
 def f(t, U):
-    f = np.zeros(n_states)
-    f1 = np.full_like(f, lambda_1(t) - mu_1(t) - omega_1(t))
+    _f = np.zeros(np.array(n_states))
+    f1 = np.full_like(f, lam(0, t) - mu(0, t) - omega(0, t))
     f1 = f1 - U[0,1] * control_mask(n_states, 0, 1)
     f1 = f1 + U[1,0] * control_mask(n_states, 1, 0)
     f1 = f1**2
 
-    f2 = np.full_like(f, lambda_2(t) - mu_2(t) - omega_2(t))
+    f2 = np.full_like(f, lam(1, t) - mu(1, t) - omega(1, t))
     f2 = f2 + U[0,1] * control_mask(n_states, 0, 1)
     f2 = f2 - U[1,0] * control_mask(n_states, 1, 0)
     f2 = f2 + U[2,1] * control_mask(n_states, 2, 1)
     f2 = f2 - U[1,2] * control_mask(n_states, 1, 2)
     f2 = f2**2
 
-    f3 = np.full_like(f, lambda_3(t) - mu_3(t) - omega_3(t))
+    f3 = np.full_like(f, lam(2, t) - mu(2, t) - omega(2, t))
     f3 = f3 - U[2,1] * control_mask(n_states, 2, 1)
     f3 = f3 + U[1,2] * control_mask(n_states, 1, 2)
     f3 = f3**2
 
-    f = f1+f2+f3
+    _f = f1+f2+f3
 
     penalty = 1e5
-    f = f + penalty * U[0,1]**2 * np.abs(control_mask(n_states, 0, 1)-1.0) # penalty for outbound control at "drought" states and inbound control at "flood" states
-    f = f + penalty * U[1,0]**2 * np.abs(control_mask(n_states, 1, 0)-1.0)
-    f = f + penalty * U[2,1]**2 * np.abs(control_mask(n_states, 2, 1)-1.0)
-    f = f + penalty * U[1,2]**2 * np.abs(control_mask(n_states, 1, 2)-1.0)
+    _f = _f + penalty * U[0,1]**2 * np.abs(control_mask(n_states, 0, 1)-1.0) # penalty for outbound control at "drought" states and inbound control at "flood" states
+    _f = _f + penalty * U[1,0]**2 * np.abs(control_mask(n_states, 1, 0)-1.0)
+    _f = _f + penalty * U[2,1]**2 * np.abs(control_mask(n_states, 2, 1)-1.0)
+    _f = _f + penalty * U[1,2]**2 * np.abs(control_mask(n_states, 1, 2)-1.0)
 
-    return f
+    return _f
 
 
 def terminal(n_states, desirable_state, factor):
@@ -113,7 +145,7 @@ def rhs(t, phi, U):
             select_slice = list(idx)
             select_slice[i] = slice(None)
             select_slice = tuple(select_slice)
-            rhs[idx] = rhs[idx] + np.inner(A[i](t, control_in(i, U), control_out(i, U))[:, idx[i]], phi[select_slice])
+            rhs[idx] = rhs[idx] + np.inner(A(i, t, control_in(i, U), control_out(i, U))[:, idx[i]], phi[select_slice])
     return rhs+f(t, U)
 
 
@@ -172,7 +204,7 @@ def plot_value_control(state, times, values, controls,  path, max_level=3):
     x = [state[0]+1, state[0]+1, state[1]+1, state[1]+1, state[2]+1, state[2]+1]
     ax_.fill_between(t,x, alpha=0.5)
     ax_.set_axis_off()
-    ax.set_ylim(0, max_level+1)
+    ax_.set_ylim(0, max_level+1)
 
     # tol_to_show = 1e-3
     # if np.abs(control[1,0]) > tol_to_show:
