@@ -2,9 +2,11 @@ from functools import partial
 from ControlledSystem import *
 from scipy.optimize import minimize
 from multiprocessing import Pool
+from time import time, strftime, localtime
 
 work_dir = 'D:\\pycharm.git\\InteractingCMCResearch\\output\\'
-recalculate = False
+recalculate = True
+show_output = False
 
 np.set_printoptions(precision=3, suppress=True)
 
@@ -22,7 +24,7 @@ def proc(idx, t, phi):
     res = minimize(lambda x: rhs(t, phi, v2m(x))[idx], init, bounds=bounds, constraints=consts) #, options={'disp':True}, method='SLSQP')
     return idx, res.x, res.fun
 
-delta = 0.01
+delta = 0.001
 T = 1.0
 
 if recalculate:
@@ -30,19 +32,24 @@ if recalculate:
         pool = Pool(processes=8)
         phi = terminal(n_states, desirable_state, 2)
         phi_enumerate = [x[0] for x in list(np.ndenumerate(phi))]
-        time = np.arange(T, 0.0-delta/2, -delta)
-        #time = [1.0]
-        values = np.zeros([time.shape[0]] + n_states)
-        controls = np.zeros([time.shape[0]] + n_states + list(m2v(lb).shape))
+        time_mesh = np.arange(T, 0.0-delta/2, -delta)
+        #time_mesh = [1.0]
+        values = np.zeros([time_mesh.shape[0]] + n_states)
+        controls = np.zeros([time_mesh.shape[0]] + n_states + list(m2v(lb).shape))
 
-
-        for idt, t in enumerate(time):
+        time_start = time()
+        for idt, t in enumerate(time_mesh):
             slice = pool.map(partial(proc, t=t, phi=phi), phi_enumerate)
             phi = phi + delta * slice2dphi(slice)
-            print(t)
-            print_slice(slice)
-            values[len(time)-idt-1,] = phi
-            controls[len(time)-idt-1,] = slice2U(slice)
+            time_elapsed = time() - time_start
+            time_step_average = time_elapsed / (idt + 1)
+            time_rest = time_step_average * len(time_mesh)
+            time_finish = time_start + time_rest
+            print(f'step: {t}, elapsed: {time_elapsed}, average step: {time_step_average}, approximate finish time: {strftime("%d %b %Y %H:%M:%S", localtime(time_finish))} ({strftime("%H:%M:%S", localtime(time_rest))} rest)')
+            if show_output:
+                print(slice)
+            values[len(time_mesh)-idt-1,] = phi
+            controls[len(time_mesh)-idt-1,] = slice2U(slice)
 
         save_results(values, controls, work_dir)
 else:
