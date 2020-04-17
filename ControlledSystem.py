@@ -3,15 +3,16 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from BasicCMC import cronsum
 from numba import jit
+import os
 
-n_states = [4, 4, 4]
+n_states = [3, 4, 5]
 np_n_states = np.array(n_states)
 desirable_state = [1, 1, 1]
 
 to_optimize = np.array([[False, True, False], [True, False, True], [False, True, False]])
 lb = np.array([[np.NaN, 0, np.NaN], [0, np.NaN, 0], [np.NaN, 0, np.NaN]])
-ub = np.array([[np.NaN, 4, np.NaN], [4, np.NaN, 2], [np.NaN, 4, np.NaN]])
-
+#ub = np.array([[np.NaN, 4, np.NaN], [4, np.NaN, 2], [np.NaN, 4, np.NaN]])
+ub = np.array([[np.NaN, 4, np.NaN], [4, np.NaN, 4], [np.NaN, 4, np.NaN]])
 
 
 
@@ -33,39 +34,71 @@ def v2print(u):
                 out = out + f'({i+1}->{j+1}) {U[i,j]:.3f} ({j+1}->{i+1}) {U[j,i]:.3f} '
     return(out)
 
+# @jit
+# def lam(i, t):
+#     if i == 0:
+#         return -np.cos(2*np.pi*t) + 10
+#     elif i == 1:
+#         return -2*np.cos(2*np.pi*t) + 14
+#     elif i == 2:
+#         return -0.5*np.cos(2*np.pi*t) + 6
+#     else:
+#         return np.NaN
+#
+# @jit
+# def mu(i, t):
+#     if i == 0:
+#         return np.sin(2*np.pi*t + 5/12*np.pi) + 3
+#     elif i == 1:
+#         return 2*np.sin(2*np.pi*t + 5/12*np.pi) + 6
+#     elif i == 2:
+#         return  0.5*np.sin(2*np.pi*t + 5/12*np.pi) + 2
+#     else:
+#         return np.NaN
+#
+# @jit
+# def omega(i, t):
+#     if i == 0:
+#         return np.sin(2*np.pi*t + 1/4*np.pi) + 7
+#     elif i == 1:
+#         return 2*np.sin(2*np.pi*t + 1/4*np.pi) + 8
+#     elif i == 2:
+#         return 0.5*np.sin(2*np.pi*t + 1/4*np.pi) + 4
+#     else:
+#         return np.NaN
+
 @jit
 def lam(i, t):
     if i == 0:
-        return -np.cos(2*np.pi*t) + 10
+        return 0
     elif i == 1:
-        return -2*np.cos(2*np.pi*t) + 14
+        return 0
     elif i == 2:
-        return -0.5*np.cos(2*np.pi*t) + 6
+        return 0
     else:
         return np.NaN
 
 @jit
 def mu(i, t):
     if i == 0:
-        return np.sin(2*np.pi*t + 5/12*np.pi) + 3
+        return 0
     elif i == 1:
-        return 2*np.sin(2*np.pi*t + 5/12*np.pi) + 6
+        return 0
     elif i == 2:
-        return  0.5*np.sin(2*np.pi*t + 5/12*np.pi) + 2
+        return 0
     else:
         return np.NaN
 
 @jit
 def omega(i, t):
     if i == 0:
-        return np.sin(2*np.pi*t + 1/4*np.pi) + 7
+        return 0
     elif i == 1:
-        return 2*np.sin(2*np.pi*t + 1/4*np.pi) + 8
+        return 0
     elif i == 2:
-        return 0.5*np.sin(2*np.pi*t + 1/4*np.pi) + 4
+        return 0
     else:
         return np.NaN
-
 
 @jit
 def A(mc_num, t, u_in, u_out):
@@ -134,7 +167,7 @@ def terminal(n_states, desirable_state, factor):
     phiT = np.zeros(n_states)
     for idx, x in np.ndenumerate(phiT):
         diff = np.sum(np.abs(np.array(idx) - desirable_state))
-        phiT[idx] = factor*diff
+        phiT[idx] = factor**diff
     return phiT
 
 
@@ -153,12 +186,45 @@ def rhs(t, phi, U):
 
 
 def rhs_tensor(t, phi, U):
-    At = [A(i, t, control_in(i, U), control_out(i, U)) for i in range(0, len(n_states))]
-    A_full = cronsum(At)
+    A_transposed = [np.transpose(A(i, t, control_in(i, U), control_out(i, U))) for i in range(0, len(n_states))]
+    A_full = cronsum(A_transposed)
     rhs_tensor = np.tensordot(A_full, phi, axes=([0,2,4],[0,1,2]))
-    rhs_tensor = rhs_tensor+f(t, U)
+    rhs_tensor = rhs_tensor + f(t, U)
     return rhs_tensor
 
+
+def rhs_p_tensor(t, p, U):
+    A_transposed = [np.transpose(A(i, t, control_in(i, U), control_out(i, U))) for i in range(0, len(n_states))]
+    A_full = cronsum(A_transposed)
+    return np.tensordot(A_full, p, axes=([0,2,4],[0,1,2]))
+
+
+def sample_path(path_num, times, controls, x0):
+    # path_num is useless, it is here to comply with function signature for parallel calculation
+    path = np.zeros((len(times), len(n_states)))
+    path[0,] = x0
+    for idt, t in enumerate(times):
+        if t>0:
+            previous_state = [int(i) for i in path[idt-1,]]
+            control_v = controls[idt,][tuple(previous_state)]
+            U = v2m(control_v)
+            delta = t - times[idt-1]
+            transition_probs = [(A(i, t, control_in(i, U), control_out(i, U)) * delta + np.identity(n_states[i]))[previous_state[i],:] for i in range(0, len(n_states))]
+            path[idt,:] = np.array([np.random.choice(np.arange(0, n_states[i]), size=1, p = transition_probs[i])[0] for i in range(0, len(n_states))])
+            #print(f'{t:.2f}', transition_probs, path[idt,:])
+    return path
+
+def average_level(p):
+    average = np.zeros(len(n_states))
+    for i in range(0, len(n_states)):
+        level = np.zeros(tuple(n_states))
+        for idx, x in np.ndenumerate(level):
+            select_slices = [slice(None)] * len(idx)
+            select_slices[i] = idx[i]
+            select_slices = tuple(select_slices)
+            level[select_slices] = idx[i]
+        average[i] = np.sum(p * level)
+    return average
 
 
 def plot_stateandcontrol_3MCs(state, control, path, max_level=3):
@@ -193,20 +259,26 @@ def plot_stateandcontrol_3MCs(state, control, path, max_level=3):
     plt.savefig(f'{path}state_{state[0]}_{state[1]}_{state[2]}.png')
     plt.close(fig)
 
-def plot_value_control(state, times, values, controls,  path, max_level=3):
+def plot_value_control(state, times, values, probabilities, controls,  path, max_level=3):
     fig = plt.figure(figsize=(6, 6), dpi=200)
     gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1])
-    gs.update(left=0.05, bottom=0.07, right=0.98, top=0.99, wspace=0.15, hspace=0.16)
+    #gs.update(left=0.05, bottom=0.07, right=0.98, top=0.99, wspace=0.15, hspace=0.16)
 
     ax = plt.subplot(gs[0])
-    ax.plot(times, values, label='value')
-    ax.legend()
+    ax.plot(times, probabilities, label='probability', color='red')
+    ax.set_ylim(0,1)
+    ax.legend(loc='upper left')
+    ax_ = plt.twinx(ax)
+    ax_.plot(times, values, label='value')
+    ax_.legend(loc='upper right')
+
+
 
     ax = plt.subplot(gs[1])
     names = ['u[1,2]','u[2,1]','u[2,3]','u[3,2]']
     for k in range(0, controls.shape[1]):
         ax.plot(times, controls[:,k], label=names[k])
-    ax.legend()
+    ax.legend(loc='upper left')
     ax.set_ylim(np.min(lb[to_optimize])-0.5,np.max(ub[to_optimize])+0.5)
     ax.set_title(f'({state[0]}, {state[1]}, {state[2]})', y=-0.01)
 
@@ -240,7 +312,9 @@ def plot_value_control(state, times, values, controls,  path, max_level=3):
     # y_labels[-1] = 'flood'
     # ax.set_yticks(y_ticks)
     # ax.set_yticklabels(y_labels)
-    plt.savefig(f'{path}controls_{state[0]}_{state[1]}_{state[2]}.png')
+
+    filename = f'{path}state_{state[0]}_{state[1]}_{state[2]}.png'
+    plt.savefig(filename)
     plt.close(fig)
 
 
@@ -254,9 +328,19 @@ def pics_slice(slice, path):
         plot_stateandcontrol_3MCs(idx, v2m(control), path, max_level=np.max(n_states))
 
 
-def pics_plots(times, values, controls, path):
+def pics_plots(times, values, probabilities, controls, path):
     for idx, _ in np.ndenumerate(np.zeros(n_states)):
-        plot_value_control(idx, times, values[tuple([slice(None)]+list(idx))], controls[tuple([slice(None)]+list(idx)+[slice(None)])], path, max_level=np.max(n_states))
+        plot_value_control(idx, times, values[tuple([slice(None)]+list(idx))], probabilities[tuple([slice(None)]+list(idx))], controls[tuple([slice(None)]+list(idx)+[slice(None)])], path, max_level=np.max(n_states))
+
+
+def pics_averages(times, average_levels, path):
+    fig = plt.figure(figsize=(6, 6), dpi=200)
+    ax = plt.subplot(plt.gca())
+    for i in range(0, len(n_states)):
+        ax.plot(times, average_levels[:,i], label=f'MC {i}')
+    ax.legend()
+    plt.savefig(f'{path}average.png')
+    plt.close(fig)
 
 
 def save_results(values, controls, path):
@@ -265,9 +349,19 @@ def save_results(values, controls, path):
 
 
 def load_results(path):
-    values = np.load(f'{path}values.npy')
-    controls = np.load(f'{path}controls.npy')
-    return values, controls
+    values = np.NaN
+    controls = np.NaN
+    probabilities = np.NaN
+    average_levels = np.NaN
+    if os.path.exists(f'{path}values.npy'):
+        values = np.load(f'{path}values.npy')
+    if os.path.exists(f'{path}controls.npy'):
+        controls = np.load(f'{path}controls.npy')
+    if os.path.exists(f'{path}probabilities.npy'):
+        probabilities = np.load(f'{path}probabilities.npy')
+    if os.path.exists(f'{path}average_levels.npy'):
+        average_levels = np.load(f'{path}average_levels.npy')
+    return values, controls, probabilities, average_levels
 
 
 def slice2dphi(slice):
