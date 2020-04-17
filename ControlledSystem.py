@@ -193,10 +193,10 @@ def rhs_tensor(t, phi, U):
     return rhs_tensor
 
 
-def rhs_p_tensor(t, p, U):
-    A_transposed = [np.transpose(A(i, t, control_in(i, U), control_out(i, U))) for i in range(0, len(n_states))]
-    A_full = cronsum(A_transposed)
-    return np.tensordot(A_full, p, axes=([0,2,4],[0,1,2]))
+def Generator_full(t, U):
+    A_full = [(A(i, t, control_in(i, U), control_out(i, U))) for i in range(0, len(n_states))]
+    A_full = cronsum(A_full)
+    return A_full
 
 
 def sample_path(path_num, times, controls, x0):
@@ -259,13 +259,14 @@ def plot_stateandcontrol_3MCs(state, control, path, max_level=3):
     plt.savefig(f'{path}state_{state[0]}_{state[1]}_{state[2]}.png')
     plt.close(fig)
 
-def plot_value_control(state, times, values, probabilities, controls,  path, max_level=3):
+def plot_value_control(state, times, values, probabilities_theor, probabilities_MC, controls,  path, max_level=3):
     fig = plt.figure(figsize=(6, 6), dpi=200)
     gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1])
     #gs.update(left=0.05, bottom=0.07, right=0.98, top=0.99, wspace=0.15, hspace=0.16)
 
     ax = plt.subplot(gs[0])
-    ax.plot(times, probabilities, label='probability', color='red')
+    ax.plot(times, probabilities_theor, label='probability', color='red')
+    ax.plot(times, probabilities_MC, color='red', linestyle=':')
     ax.set_ylim(0,1)
     ax.legend(loc='upper left')
     ax_ = plt.twinx(ax)
@@ -328,16 +329,18 @@ def pics_slice(slice, path):
         plot_stateandcontrol_3MCs(idx, v2m(control), path, max_level=np.max(n_states))
 
 
-def pics_plots(times, values, probabilities, controls, path):
+def pics_plots(times, values, probabilities_theor, probabilities_MC, controls, path):
     for idx, _ in np.ndenumerate(np.zeros(n_states)):
-        plot_value_control(idx, times, values[tuple([slice(None)]+list(idx))], probabilities[tuple([slice(None)]+list(idx))], controls[tuple([slice(None)]+list(idx)+[slice(None)])], path, max_level=np.max(n_states))
+        plot_value_control(idx, times, values[tuple([slice(None)]+list(idx))], probabilities_theor[tuple([slice(None)]+list(idx))], probabilities_MC[tuple([slice(None)]+list(idx))], controls[tuple([slice(None)]+list(idx)+[slice(None)])], path, max_level=np.max(n_states))
 
 
-def pics_averages(times, average_levels, path):
+def pics_averages(times, average_levels_theor, average_levels_MC, path):
+    colors = ['red', 'green', 'blue']
     fig = plt.figure(figsize=(6, 6), dpi=200)
     ax = plt.subplot(plt.gca())
     for i in range(0, len(n_states)):
-        ax.plot(times, average_levels[:,i], label=f'MC {i}')
+        ax.plot(times, average_levels_theor[:, i], label=f'MC {i}', color=colors[i])
+        ax.plot(times, average_levels_MC[:, i], linestyle=':')
     ax.legend()
     plt.savefig(f'{path}average.png')
     plt.close(fig)
@@ -351,17 +354,23 @@ def save_results(values, controls, path):
 def load_results(path):
     values = np.NaN
     controls = np.NaN
-    probabilities = np.NaN
-    average_levels = np.NaN
+    probabilities_theor = np.NaN
+    probabilities_MC = np.NaN
+    average_levels_theor = np.NaN
+    average_levels_MC = np.NaN
     if os.path.exists(f'{path}values.npy'):
         values = np.load(f'{path}values.npy')
     if os.path.exists(f'{path}controls.npy'):
         controls = np.load(f'{path}controls.npy')
-    if os.path.exists(f'{path}probabilities.npy'):
-        probabilities = np.load(f'{path}probabilities.npy')
-    if os.path.exists(f'{path}average_levels.npy'):
-        average_levels = np.load(f'{path}average_levels.npy')
-    return values, controls, probabilities, average_levels
+    if os.path.exists(f'{path}probabilities_theor.npy'):
+        probabilities_theor = np.load(f'{path}probabilities_theor.npy')
+    if os.path.exists(f'{path}probabilities_MC.npy'):
+        probabilities_MC = np.load(f'{path}probabilities_MC.npy')
+    if os.path.exists(f'{path}average_levels_theor.npy'):
+        average_levels_theor = np.load(f'{path}average_levels_theor.npy')
+    if os.path.exists(f'{path}average_levels_MC.npy'):
+        average_levels_MC = np.load(f'{path}average_levels_MC.npy')
+    return values, controls, probabilities_theor, probabilities_MC, average_levels_theor, average_levels_MC
 
 
 def slice2dphi(slice):
