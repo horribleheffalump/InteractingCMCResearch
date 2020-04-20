@@ -61,34 +61,25 @@ class ControlledDams(ControlledSystem):
 
 
 
+
     def f(self, t, U):
         _f = np.zeros(np.array(self.n_states))
-        f1 = np.full_like(_f, lam(0, t) - mu(0, t) - omega(0, t))
-        f1 = f1 - U[0,1] * control_mask(self.n_states, 0, 1)
-        f1 = f1 + U[1,0] * control_mask(self.n_states, 1, 0)
-        f1 = f1**2
-
-        f2 = np.full_like(_f, lam(1, t) - mu(1, t) - omega(1, t))
-        f2 = f2 + U[0,1] * control_mask(self.n_states, 0, 1)
-        f2 = f2 - U[1,0] * control_mask(self.n_states, 1, 0)
-        f2 = f2 + U[2,1] * control_mask(self.n_states, 2, 1)
-        f2 = f2 - U[1,2] * control_mask(self.n_states, 1, 2)
-        f2 = f2**2
-
-        f3 = np.full_like(_f, lam(2, t) - mu(2, t) - omega(2, t))
-        f3 = f3 - U[2,1] * control_mask(self.n_states, 2, 1)
-        f3 = f3 + U[1,2] * control_mask(self.n_states, 1, 2)
-        f3 = f3**2
-
-        _f = f1+f2+f3
+        for i in range(0, self.n_mcs):
+            _f_i = np.full_like(_f, lam(i, t) - mu(i, t) - omega(i, t))
+            for j in range(0, self.n_mcs):
+                if self.to_optimize[i,j]:
+                    _f_i = _f_i - U[i,j] * control_mask(self.n_states, i, j)
+                if self.to_optimize[j,i]:
+                    _f_i = _f_i + U[j,i] * control_mask(self.n_states, j, i)
+            _f = _f + _f_i**2
 
         penalty = 1e5
-        _f = _f + penalty * U[0,1]**2 * np.abs(control_mask(self.n_states, 0, 1) - 1.0) # penalty for outbound control at "drought" states and inbound control at "flood" states
-        _f = _f + penalty * U[1,0]**2 * np.abs(control_mask(self.n_states, 1, 0) - 1.0)
-        _f = _f + penalty * U[2,1]**2 * np.abs(control_mask(self.n_states, 2, 1) - 1.0)
-        _f = _f + penalty * U[1,2]**2 * np.abs(control_mask(self.n_states, 1, 2) - 1.0)
-
+        for i in range(0, self.n_mcs):
+            for j in range(0, self.n_mcs):
+                if self.to_optimize[i, j]:
+                    _f = _f + penalty * U[i,j]**2 * np.abs(control_mask(self.n_states, i, j) - 1.0) # penalty for outbound control at "drought" states and inbound control at "flood" states
         return _f
+
 
     def A(self, mc_num, t, U):
         return _A(self.n_states[mc_num], mc_num, t, U, self.to_optimize)
@@ -107,36 +98,14 @@ def _A(n, mc_num, t, U, to_optimize):
 
 @jit
 def lam(i, t):
-    if i == 0:
-        return 0
-    elif i == 1:
-        return 0
-    elif i == 2:
-        return 0
-    else:
-        return np.NaN
+    return 0
 
 @jit
 def mu(i, t):
-    if i == 0:
-        return 0
-    elif i == 1:
-        return 0
-    elif i == 2:
-        return 0
-    else:
-        return np.NaN
-
+    return 0
 @jit
 def omega(i, t):
-    if i == 0:
-        return 0
-    elif i == 1:
-        return 0
-    elif i == 2:
-        return 0
-    else:
-        return np.NaN
+    return 0
 
 @jit
 def control_out(i, U, to_optimize):  # i - MC number
@@ -145,6 +114,39 @@ def control_out(i, U, to_optimize):  # i - MC number
 @jit
 def control_in(i, U, to_optimize):  # i - MC number
     return np.sum(U[:, i][to_optimize[:, i]])
+
+
+    # def f(self, t, U): # for 3 MCs
+    #     _f = np.zeros(np.array(self.n_states))
+    #     f1 = np.full_like(_f, lam(0, t) - mu(0, t) - omega(0, t))
+    #     f1 = f1 - U[0,1] * control_mask(self.n_states, 0, 1)
+    #     f1 = f1 + U[1,0] * control_mask(self.n_states, 1, 0)
+    #     f1 = f1**2
+    #
+    #     f2 = np.full_like(_f, lam(1, t) - mu(1, t) - omega(1, t))
+    #     f2 = f2 + U[0,1] * control_mask(self.n_states, 0, 1)
+    #     f2 = f2 - U[1,0] * control_mask(self.n_states, 1, 0)
+    #     f2 = f2 + U[2,1] * control_mask(self.n_states, 2, 1)
+    #     f2 = f2 - U[1,2] * control_mask(self.n_states, 1, 2)
+    #     f2 = f2**2
+    #
+    #     f3 = np.full_like(_f, lam(2, t) - mu(2, t) - omega(2, t))
+    #     f3 = f3 - U[2,1] * control_mask(self.n_states, 2, 1)
+    #     f3 = f3 + U[1,2] * control_mask(self.n_states, 1, 2)
+    #     f3 = f3**2
+    #
+    #     _f = f1+f2+f3
+    #
+    #     penalty = 1e5
+    #     _f = _f + penalty * U[0,1]**2 * np.abs(control_mask(self.n_states, 0, 1) - 1.0) # penalty for outbound control at "drought" states and inbound control at "flood" states
+    #     _f = _f + penalty * U[1,0]**2 * np.abs(control_mask(self.n_states, 1, 0) - 1.0)
+    #     _f = _f + penalty * U[2,1]**2 * np.abs(control_mask(self.n_states, 2, 1) - 1.0)
+    #     _f = _f + penalty * U[1,2]**2 * np.abs(control_mask(self.n_states, 1, 2) - 1.0)
+    #
+    #     diff = np.linalg.norm(_f - self.f2(t,U))
+    #     if diff > 1e-5:
+    #         print(f'ACHTUNG {diff}')
+    #     return _f
 
 
 # def rhs(t, phi, U): # incorrect

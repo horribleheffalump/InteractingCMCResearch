@@ -267,13 +267,15 @@ class ControlledSystem(ABC):
         self.average_levels_theor = np.zeros([self.time_mesh.shape[0]] + [self.n_mcs])
 
         p_theor = np.zeros(self.n_states)
-        p_theor[start_state] = 1.0
+        p_theor[tuple(start_state)] = 1.0
 
         for idt, t in enumerate(self.time_mesh):
             if t>0:
                 generator = np.full(np.repeat(self.n_states, 2), np.nan)
                 for idp1, _ in np.ndenumerate(p_theor):
-                    generator[idp1[0], :, idp1[1], :, idp1[2], :] = self.Generator_full(t, self.v2m(self.controls[idt,][idp1]))[idp1[0], :, idp1[1], :, idp1[2], :]
+                    selection = tuple([item for sublist in ([idp1[i], slice(None)] for i in range(0,self.n_mcs)) for item in sublist])
+                    #generator[idp1[0], :, idp1[1], :, idp1[2], :] = self.Generator_full(t, self.v2m(self.controls[idt,][idp1]))[idp1[0], :, idp1[1], :, idp1[2], :] # for 3 MCs
+                    generator[selection] = self.Generator_full(t, self.v2m(self.controls[idt,][idp1]))[selection]
                 p_theor = p_theor + (t - self.time_mesh[idt-1]) * np.tensordot(generator, p_theor, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case
             self.probs_joint_theor[idt] = p_theor
             self.average_levels_theor[idt,] = self.average_level(p_theor)
@@ -293,7 +295,7 @@ class ControlledSystem(ABC):
         self.average_levels_MC = np.average(np.array(paths), axis=0)
 
         p_theor = np.zeros(self.n_states)
-        p_theor[start_state] = 1.0
+        p_theor[tuple(start_state)] = 1.0
         p_MC = p_theor
 
         for idt, t in enumerate(self.time_mesh):
@@ -324,18 +326,17 @@ class ControlledSystem(ABC):
             ax.plot(times, controls[:,k], label=self.names[k])
         ax.legend(loc='upper left')
         ax.set_ylim(np.min(self.lb[self.to_optimize])-0.5,np.max(self.ub[self.to_optimize])+0.5)
-        ax.set_title(f'({state[0]}, {state[1]}, {state[2]})', y=-0.01)
+        ax.set_title(f'{state}', y=-0.01)
 
         ax_ = plt.twinx(ax)
-        # TODO: generalize for n_mcs != 3
-        tsize = (np.max(times) - np.min(times))/3.0
-        t = [np.min(times) + tsize*x for x in [0,1,1,2,2,3]]
-        x = [state[0]+1, state[0]+1, state[1]+1, state[1]+1, state[2]+1, state[2]+1]
+        tsize = (np.max(times) - np.min(times))/self.n_mcs
+        t = [np.min(times) + tsize*x for x in [val for val in range(0, self.n_mcs+1) for _ in (0, 1)][1:-1]]
+        x = [val+1 for val in state for _ in (0, 1)]
+        #x = [state[0]+1, state[0]+1, state[1]+1, state[1]+1, state[2]+1, state[2]+1]
         ax_.fill_between(t,x, alpha=0.5)
         ax_.set_axis_off()
         ax_.set_ylim(0, np.max(self.n_states)+1)
-
-        filename = f'{path}state_{state[0]}_{state[1]}_{state[2]}.png'
+        filename = f'{path}state_{"_".join(str(x) for x in state)}.png'
         plt.savefig(filename)
         plt.close(fig)
 

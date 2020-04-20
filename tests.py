@@ -10,23 +10,42 @@ np.set_printoptions(precision=3, suppress=True)
 work_dir = 'D:\\projects.git\\InteractingCMCResearch\\output\\'
 show_output = False
 
-do_recalculate = False
+do_recalculate = True
 do_probabilities = True
 do_pics_by_state = True
 do_pics_averages = True
 
 
-n_states = [3, 4, 5]
+# n_states = [5, 10]
+# desirable_state = [5, 5]
+# start_state = [0, 9]
+#
+# to_optimize = np.array([[False, True], [True, False]])
+# lb = np.array([[np.NaN, 0], [0, np.NaN]])
+# ub = np.array([[np.NaN, 4], [4, np.NaN]])
+#
+# dams = ControlledDams(n_states, to_optimize, lb, ub, ['U[1->2]', 'U[2->1]'])
 
+
+n_states = [3, 4, 5]
 desirable_state = [1, 1, 1]
+start_state = [0, 3, 0]
 
 to_optimize = np.array([[False, True, False], [True, False, True], [False, True, False]])
 lb = np.array([[np.NaN, 0, np.NaN], [0, np.NaN, 0], [np.NaN, 0, np.NaN]])
 ub = np.array([[np.NaN, 4, np.NaN], [4, np.NaN, 4], [np.NaN, 4, np.NaN]])
 
-start_state = (0,3,0)
-
 dams = ControlledDams(n_states, to_optimize, lb, ub, ['U[1->2]', 'U[2->1]', 'U[2->3]', 'U[3->2]'])
+
+# n_states = [3, 4, 5, 3]
+# desirable_state = [1, 1, 1, 1]
+# start_state = [0, 3, 4, 0]
+#
+# to_optimize = np.array([[False, True, False, False], [True, False, True, False], [False, True, False, True], [False, False, True, False]])
+# lb = np.zeros((4,4))
+# ub = 4*np.ones((4,4))
+#
+# dams = ControlledDams(n_states, to_optimize, lb, ub, ['U[1->2]', 'U[2->1]', 'U[2->3]', 'U[3->2]', 'U[3->4]', 'U[4->3]'])
 
 
 
