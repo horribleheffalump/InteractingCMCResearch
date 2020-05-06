@@ -98,6 +98,9 @@ class ControlledSystem(ABC):
         :param t: time
         :param U: control matrix
         :return: MC generator (transposed intensity matrix)
+        e.g. [[-lambda, lambda, 0], [mu, -lambda-mu, lambda], [0, mu, -mu]]
+        Note, that in fact this is a transposed generator,
+        so to use it in the Kolmogorov equation, we have to transpose it once again
         '''
         pass
 
@@ -119,10 +122,10 @@ class ControlledSystem(ABC):
         :param U: control matrix
         :return: Hamiltonian in tensor form H[i1,i2,....]
         '''
-        #A_transposed = [np.transpose(self.A(i, t, U)) for i in range(0, self.n_mcs)]
-        A_full = self.Generator_transposed(t, U)
-        h = np.tensordot(A_full, phi, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case
-        #h = np.tensordot(A_full, phi, axes=([0,2,4],[0,1,2]))
+        # A_full = self.Generator_transposed(t, U)
+        # h = np.tensordot(A_full, phi, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case
+        A_full = self.Generator_full(t, U)
+        h = np.tensordot(A_full, phi, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case (the same as [1,3,5][0,1,2] for the generator constructed from the transposed matrices)
         h = h + self.f(t, U)
         return h
 
@@ -134,21 +137,10 @@ class ControlledSystem(ABC):
         :param U: control matrix
         :return: generator in tensor form
         '''
-        A_full = [(self.A(i, t, U)) for i in range(0, self.n_mcs)]
+        # transpose the local generators, since they are defined transposed!!!
+        A_full = [np.transpose((self.A(i, t, U))) for i in range(0, self.n_mcs)]
         A_full = cronsum(A_full)
         return A_full
-
-    def Generator_transposed(self, t, U):
-        '''
-        Transposed compound MC generator in tensor form, which is Kronecker sum of the MCs' generators
-        :param t: time
-        :param U: control matrix
-        :return: transposed generator in tensor form
-        '''
-        A_transposed = [np.transpose(self.A(i, t, U)) for i in range(0, self.n_mcs)]
-        A_full = cronsum(A_transposed)
-        return A_full
-
 
     def sample_path(self, path_num, times, controls, x0):
         '''
@@ -273,10 +265,10 @@ class ControlledSystem(ABC):
             if t>0:
                 generator = np.full(np.repeat(self.n_states, 2), np.nan)
                 for idp1, _ in np.ndenumerate(p_theor):
-                    selection = tuple([item for sublist in ([idp1[i], slice(None)] for i in range(0,self.n_mcs)) for item in sublist])
+                    selection = tuple([item for sublist in ([slice(None), idp1[i]] for i in range(0,self.n_mcs)) for item in sublist])
                     #generator[idp1[0], :, idp1[1], :, idp1[2], :] = self.Generator_full(t, self.v2m(self.controls[idt,][idp1]))[idp1[0], :, idp1[1], :, idp1[2], :] # for 3 MCs
                     generator[selection] = self.Generator_full(t, self.v2m(self.controls[idt,][idp1]))[selection]
-                p_theor = p_theor + (t - self.time_mesh[idt-1]) * np.tensordot(generator, p_theor, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case
+                p_theor = p_theor + (t - self.time_mesh[idt-1]) * np.tensordot(generator, p_theor, axes=(list(range(1, 2 * self.n_mcs + 1, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [1,3,5][0,1,2] for 3 MC case
             self.probs_joint_theor[idt] = p_theor
             self.average_levels_theor[idt,] = self.average_level(p_theor)
 
@@ -316,7 +308,7 @@ class ControlledSystem(ABC):
         ax.set_ylim(0,1)
         ax.legend(loc='upper left')
         ax_ = plt.twinx(ax)
-        ax_.plot(times, values, label='value')
+        ax_.plot(times, values, label='value') 
         ax_.legend(loc='upper right')
 
 

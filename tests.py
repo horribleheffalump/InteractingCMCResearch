@@ -16,6 +16,7 @@ do_pics_by_state = True
 do_pics_averages = True
 
 
+# 2 dams
 # n_states = [5, 10]
 # desirable_state = [5, 5]
 # start_state = [0, 9]
@@ -27,6 +28,7 @@ do_pics_averages = True
 # dams = ControlledDams(n_states, to_optimize, lb, ub, ['U[1->2]', 'U[2->1]'])
 
 
+# 3 dams
 n_states = [3, 4, 5]
 desirable_state = [1, 1, 1]
 start_state = [0, 3, 0]
@@ -37,6 +39,7 @@ ub = np.array([[np.NaN, 4, np.NaN], [4, np.NaN, 4], [np.NaN, 4, np.NaN]])
 
 dams = ControlledDams(n_states, to_optimize, lb, ub, ['U[1->2]', 'U[2->1]', 'U[2->3]', 'U[3->2]'])
 
+# 4 dams
 # n_states = [3, 4, 5, 3]
 # desirable_state = [1, 1, 1, 1]
 # start_state = [0, 3, 4, 0]

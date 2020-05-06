@@ -25,43 +25,6 @@ class ControlledDams(ControlledSystem):
         super().__init__(n_states, controls_to_optimize, controls_lb, controls_ub, control_names)
 
 
-    # @jit
-# def lam(i, t):
-#     if i == 0:
-#         return -np.cos(2*np.pi*t) + 10
-#     elif i == 1:
-#         return -2*np.cos(2*np.pi*t) + 14
-#     elif i == 2:
-#         return -0.5*np.cos(2*np.pi*t) + 6
-#     else:
-#         return np.NaN
-#
-# @jit
-# def mu(i, t):
-#     if i == 0:
-#         return np.sin(2*np.pi*t + 5/12*np.pi) + 3
-#     elif i == 1:
-#         return 2*np.sin(2*np.pi*t + 5/12*np.pi) + 6
-#     elif i == 2:
-#         return  0.5*np.sin(2*np.pi*t + 5/12*np.pi) + 2
-#     else:
-#         return np.NaN
-#
-# @jit
-# def omega(i, t):
-#     if i == 0:
-#         return np.sin(2*np.pi*t + 1/4*np.pi) + 7
-#     elif i == 1:
-#         return 2*np.sin(2*np.pi*t + 1/4*np.pi) + 8
-#     elif i == 2:
-#         return 0.5*np.sin(2*np.pi*t + 1/4*np.pi) + 4
-#     else:
-#         return np.NaN
-
-
-
-
-
     def f(self, t, U):
         _f = np.zeros(np.array(self.n_states))
         for i in range(0, self.n_mcs):
@@ -115,6 +78,38 @@ def control_out(i, U, to_optimize):  # i - MC number
 def control_in(i, U, to_optimize):  # i - MC number
     return np.sum(U[:, i][to_optimize[:, i]])
 
+    # @jit
+    # def lam(i, t):
+    #     if i == 0:
+    #         return -np.cos(2*np.pi*t) + 10
+    #     elif i == 1:
+    #         return -2*np.cos(2*np.pi*t) + 14
+    #     elif i == 2:
+    #         return -0.5*np.cos(2*np.pi*t) + 6
+    #     else:
+    #         return np.NaN
+    #
+    # @jit
+    # def mu(i, t):
+    #     if i == 0:
+    #         return np.sin(2*np.pi*t + 5/12*np.pi) + 3
+    #     elif i == 1:
+    #         return 2*np.sin(2*np.pi*t + 5/12*np.pi) + 6
+    #     elif i == 2:
+    #         return  0.5*np.sin(2*np.pi*t + 5/12*np.pi) + 2
+    #     else:
+    #         return np.NaN
+    #
+    # @jit
+    # def omega(i, t):
+    #     if i == 0:
+    #         return np.sin(2*np.pi*t + 1/4*np.pi) + 7
+    #     elif i == 1:
+    #         return 2*np.sin(2*np.pi*t + 1/4*np.pi) + 8
+    #     elif i == 2:
+    #         return 0.5*np.sin(2*np.pi*t + 1/4*np.pi) + 4
+    #     else:
+    #         return np.NaN
 
     # def f(self, t, U): # for 3 MCs
     #     _f = np.zeros(np.array(self.n_states))
