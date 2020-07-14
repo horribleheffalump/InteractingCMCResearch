@@ -2,8 +2,8 @@ from pandas.plotting import scatter_matrix
 import seaborn as sns
 
 
-from DataImport import *
-from DataApproximations import *
+from DELWPdata.DataImport import *
+from DELWPdata.DataApproximations import *
 
 
 data_rain = import_rainfall("D:\\Наука\\_Статьи\\__в работе\\water\\data\\Eildon rainfall\\IDCJAC0009_088023_1800_Data.csv", 1)
