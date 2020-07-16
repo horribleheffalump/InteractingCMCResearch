@@ -83,7 +83,10 @@ class ControlledSystem(ABC):
         self.tol_constraints = 1e-10
         temp_U = np.fromfunction(lambda i,j: i+j, (self.n_mcs, self.n_mcs))
         temp_v = self.m2v(temp_U)
-        self.incompatible_control_pairs = [[i for i, x in enumerate(temp_v) if x == item] for item in set(temp_v)]
+        if np.any(np.unique(temp_v) != temp_v):
+            self.incompatible_control_pairs = [[i for i, x in enumerate(temp_v) if x == item] for item in set(temp_v)]
+        else:
+            self.incompatible_control_pairs = []
 
         # time mesh parameters
         self.T = np.nan
@@ -374,7 +377,7 @@ class ControlledSystem(ABC):
         phiT = np.zeros(self.n_states)
         for idx, x in np.ndenumerate(phiT):
             diff = np.sum(np.abs(np.array(idx) - desirable_state))
-            phiT[idx] = factor ** diff
+            phiT[idx] = factor ** diff * 1e6
         return phiT
 
     def load_results(self, path):

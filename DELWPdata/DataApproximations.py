@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import optimize
 import matplotlib.pyplot as plt
+from numba import jit
 
 def moving_averages(x, half_window):
     x = np.append(np.array([x[0]]*half_window), x)
@@ -10,14 +11,17 @@ def moving_averages(x, half_window):
     ma = (cumsum[window:-1] - cumsum[:-window-1]) / window
     return ma
 
+@jit
 def approx(coeffs, t, period = 1.0):
     dim = int((coeffs.size - 1) / 2)
     a0 = coeffs[0]
     a = coeffs[1:dim+1]
     b = coeffs[dim+1:2*dim+1]
-    res = a0 \
-          + sum(map(lambda i : a[i] * np.sin(2 * np.pi * (i+1) / period * t), range(0,dim))) \
-          + sum(map(lambda i : b[i] * np.cos(2 * np.pi * (i+1) / period * t), range(0,dim)))
+    tt = 2 * np.pi / period * np.arange(1, dim+1) * np.ones((t.size, dim)) * t.reshape((t.size,1))
+    res = a0 + np.sum(a * np.sin(tt), axis = 1) + np.sum(b * np.cos(tt), axis = 1)
+    # res = a0 \
+    #       + sum(map(lambda i : a[i] * np.sin(2 * np.pi * (i+1) / period * t), range(0,dim))) \
+    #       + sum(map(lambda i : b[i] * np.cos(2 * np.pi * (i+1) / period * t), range(0,dim)))
     return res
 
 
@@ -36,7 +40,7 @@ class approximation():
             p0 = np.array([1.0]*(2*i+1))
             result = optimize.leastsq(lambda p: approx(p, self.points) - self.values, p0)
             rmse = np.mean((approx(result[0], self.points) - self.values)**2)
-            self.coeffs.append(result[0])
+            self.coeffs.append(np.array(result[0]))
             self.rmses.append(rmse)
 
     def plot_all(self):

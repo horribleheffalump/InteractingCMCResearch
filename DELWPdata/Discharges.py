@@ -47,9 +47,9 @@ if recalc:
 
     # approximations
     approximations = {}
-    approximations.update({'Rainfall' : approximation('Rainfall', data_year_dropped.index, data_year_dropped['rainfall'], 14, 4, 4)})
+    approximations.update({'Rainfall' : approximation('Rainfall', data_year_dropped.index.values, data_year_dropped['rainfall'], 14, 4, 4)})
     for s in discharges_approx:
-        approximations.update({s: approximation(s, data_year_dropped.index, data_year_dropped[s], 3, 40, 40)})
+        approximations.update({s: approximation(s, data_year_dropped.index.values, data_year_dropped[s], 3, 10, 10)})
 
     total_int = 0.0
     for s in ['GoulburnRiver-D', 'StuartMurrey-D', 'EastMain-D', 'Cattanach-D']:
@@ -66,9 +66,10 @@ else:
     for s in all_series:
         all_params.update({s : np.load(filename_template.replace('[param]', s))})
 
+    plot_points =  np.arange(0.5, 1.5, 0.001)
     fig, ax1 = plt.subplots()
     for s in all_series:
-        ax1.plot(points, approx(all_params[s], points), label=s)
+        ax1.plot(plot_points, approx(all_params[s], plot_points), label=s)
     ax1.legend(loc='upper center')
     fig.tight_layout()
     plt.show()
