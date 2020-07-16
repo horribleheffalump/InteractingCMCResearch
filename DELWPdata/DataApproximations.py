@@ -24,6 +24,18 @@ def approx(coeffs, t, period = 1.0):
     #       + sum(map(lambda i : b[i] * np.cos(2 * np.pi * (i+1) / period * t), range(0,dim)))
     return res
 
+@jit
+def approx_scalar(coeffs, t):
+    dim = int((coeffs.size - 1) / 2)
+    a0 = coeffs[0]
+    a = coeffs[1:dim+1]
+    b = coeffs[dim+1:2*dim+1]
+    tt = 2 * np.pi * np.arange(1, dim+1) * t
+    res = a0 + np.sum(a * np.sin(tt)) + np.sum(b * np.cos(tt))
+    # res = a0 \
+    #       + sum(map(lambda i : a[i] * np.sin(2 * np.pi * (i+1) / period * t), range(0,dim))) \
+    #       + sum(map(lambda i : b[i] * np.cos(2 * np.pi * (i+1) / period * t), range(0,dim)))
+    return res
 
 class approximation():
     def __init__(self, label, points, values, ma_halfwindow, min_degree, max_degree):

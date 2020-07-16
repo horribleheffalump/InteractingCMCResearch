@@ -17,13 +17,14 @@ do_pics_averages = True
 
 
 
-desirable_state = [8, 8, 0, 0, 0, 0]
-start_state = [8, 8, 0, 0, 0, 0]
+n_states = [4, 4, 1, 1, 1, 1]
+desirable_state = [2, 2, 0, 0, 0, 0]
+start_state = [2, 2, 0, 0, 0, 0]
 
-dams = GoulburnSimpleModel()
+dams = GoulburnSimpleModel(n_states)
 
 
-delta = 1e-4
+delta = 1e-3
 
 T = 1.0
 
@@ -41,6 +42,8 @@ if __name__ == '__main__':
         dams.calculate_probabilities_MC(start_state)
         np.save(f'{work_dir}probabilities_theor.npy', dams.probs_joint_theor)
         np.save(f'{work_dir}average_levels_theor.npy', dams.average_levels_theor)
+        #np.save(f'{work_dir}probabilities_MC.npy', dams.probs_joint_theor)
+        #np.save(f'{work_dir}average_levels_MC.npy', dams.average_levels_theor)
         np.save(f'{work_dir}probabilities_MC.npy', dams.probs_joint_MC)
         np.save(f'{work_dir}average_levels_MC.npy', dams.average_levels_MC)
     else:

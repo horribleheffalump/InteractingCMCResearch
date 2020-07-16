@@ -2,57 +2,16 @@ import numpy as np
 from numba import jit
 
 from ControlledSystem import ControlledSystem
-from DELWPdata.DataApproximations import approx
+from DELWPdata.DataApproximations import *
 
-filename_template = "D:\\Наука\\_Статьи\\__в работе\\water\\data\\_discharges_approximations\\[param]_approx.npy"
-discharges_approx = ['Eildon-D', 'StuartMurrey-D', 'EastMain-D', 'Cattanach-D', 'GoulburnRiver-D']
-all_series = discharges_approx + ['Rainfall']
+# discharges_approx = ['Eildon-D', 'StuartMurrey-D', 'EastMain-D', 'Cattanach-D', 'GoulburnRiver-D']
+# all_series = discharges_approx + ['Rainfall']
 
-all_params = {}
-for s in all_series:
-    all_params.update({s: np.load(filename_template.replace('[param]', s))})
+# all_params = {}
+# for s in all_series:
+#     all_params.update({s: np.load(filename_template.replace('[param]', s))})
 
-capacity_Eildon = 3334158 # in ML
-capacity_Goulburn = 25500
 
-n_states_Eildon = 10
-n_states_Goulburn = 10
-
-# discharge ratios: coefficient which transforms the discharge into intensity
-drE = n_states_Eildon / capacity_Eildon * 365
-drG = n_states_Goulburn / capacity_Goulburn * 365
-
-points = np.arange(0,1,0.002)
-max_discharge_Eildon = np.max(approx(all_params['Eildon-D'], points))
-min_discharge_Eildon = np.min(approx(all_params['Eildon-D'], points))
-
-max_discharge_SM = np.max(approx(all_params['StuartMurrey-D'], points))
-max_discharge_Ct = np.max(approx(all_params['Cattanach-D'], points))
-max_discharge_EM = np.max(approx(all_params['EastMain-D'], points))
-max_discharge_GR = np.max(approx(all_params['GoulburnRiver-D'], points))
-
-to_optimize = np.array([[False, True, False, False, False, False],
-                        [False, False, True, True, True, True],
-                        [False, False, False, False, False, False],
-                        [False, False, False, False, False, False],
-                        [False, False, False, False, False, False],
-                        [False, False, False, False, False, False]])
-lb = np.array([[np.NaN, 0, np.NaN, np.NaN, np.NaN, np.NaN],
-               [np.NaN, np.NaN, 0, 0, 0, 0],
-               [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
-               [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
-               [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
-               [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN]])
-ub = np.array([[np.NaN, max_discharge_Eildon, np.NaN, np.NaN, np.NaN, np.NaN],
-               [np.NaN, np.NaN, max_discharge_SM, max_discharge_Ct, max_discharge_EM, max_discharge_GR],
-               [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
-               [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
-               [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
-               [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN]])
-
-control_labels = ['Eildon', 'Stuart Murrey', 'Cattanach', 'East Main', 'Goulburn river']
-
-time_shift = 0.5
 
 def select_slice_by_dimension(shape, dim, slice_num):
     idx = [slice(None)] * dim + [slice_num] + [slice(None)] * (len(shape) - dim - 1)
@@ -71,32 +30,75 @@ class GoulburnSimpleModel(ControlledSystem):
     '''
     Defines a system of connected dams.
     '''
-    def __init__(self):
-        super().__init__([n_states_Eildon, n_states_Goulburn, 1, 1, 1, 1], to_optimize, lb, ub, control_labels)
+    def __init__(self, n_states):
+        filename_template = "D:\\Наука\\_Статьи\\__в работе\\water\\data\\_discharges_approximations\\[param]_approx.npy"
+
+        self.RF_coeffs = np.load(filename_template.replace('[param]', 'Rainfall'))
+        self.Ei_coeffs = np.load(filename_template.replace('[param]', 'Eildon-D'))
+        self.SM_coeffs = np.load(filename_template.replace('[param]', 'StuartMurrey-D'))
+        self.Ct_coeffs = np.load(filename_template.replace('[param]', 'Cattanach-D'))
+        self.EM_coeffs = np.load(filename_template.replace('[param]', 'EastMain-D'))
+        self.GR_coeffs = np.load(filename_template.replace('[param]', 'GoulburnRiver-D'))
+
+        points = np.arange(0, 1, 0.002)
+        max_discharge_Ei = np.max(approx(self.Ei_coeffs, points))
+        max_discharge_SM = np.max(approx(self.SM_coeffs, points))
+        max_discharge_Ct = np.max(approx(self.Ct_coeffs, points))
+        max_discharge_EM = np.max(approx(self.EM_coeffs, points))
+        max_discharge_GR = np.max(approx(self.GR_coeffs, points))
+
+        to_optimize = np.array([[False, True, False, False, False, False],
+                                [False, False, True, True, True, True],
+                                [False, False, False, False, False, False],
+                                [False, False, False, False, False, False],
+                                [False, False, False, False, False, False],
+                                [False, False, False, False, False, False]])
+        lb = np.array([[np.NaN, 0, np.NaN, np.NaN, np.NaN, np.NaN],
+                       [np.NaN, np.NaN, 0, 0, 0, 0],
+                       [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
+                       [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
+                       [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
+                       [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN]])
+        ub = np.array([[np.NaN, max_discharge_Ei, np.NaN, np.NaN, np.NaN, np.NaN],
+                       [np.NaN, np.NaN, max_discharge_SM, max_discharge_Ct, max_discharge_EM, max_discharge_GR],
+                       [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
+                       [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
+                       [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN],
+                       [np.NaN, np.NaN, np.NaN, np.NaN, np.NaN, np.NaN]])
+
+        capacity_Eildon = 3334158  # in ML
+        capacity_Goulburn = 25500
+
+        n_states_Eildon = n_states[0]
+        n_states_Goulburn = n_states[1]
+
+        # discharge ratios: coefficient which transforms the discharge into intensity
+        self.drE = n_states_Eildon / capacity_Eildon * 365
+        self.drG = n_states_Goulburn / capacity_Goulburn * 365
+
+        control_labels = ['Eildon', 'Stuart Murrey', 'Cattanach', 'East Main', 'Goulburn river']
+
+        self.time_shift = 0.5
+
+        super().__init__(n_states, to_optimize, lb, ub, control_labels)
+
 
 
     def f(self, t, U):
         _f = np.zeros(np.array(self.n_states))
-        u_all = self.m2v(U)
-        u_El = u_all[0]
-        u_SM = u_all[1]
-        u_Ct = u_all[2]
-        u_EM = u_all[3]
-        u_GR = u_all[4]
-        u_SM_ref = approx(all_params['StuartMurrey-D'], np.array(t+time_shift))
-        u_Ct_ref = approx(all_params['Cattanach-D'], np.array(t+time_shift))
-        u_EM_ref = approx(all_params['EastMain-D'], np.array(t+time_shift))
-        u_GR_ref = approx(all_params['GoulburnRiver-D'], np.array(t+time_shift))
-        _f = _f + (u_El - u_SM - u_Ct - u_EM - u_GR)**2 + (u_SM - u_SM_ref)**2 + (u_Ct - u_Ct_ref)**2 + (u_EM - u_EM_ref)**2 + (u_GR - u_GR_ref)**2
+        u = self.m2v(U)
+        t_shifted = t + self.time_shift
+        u_SM_ref = approx_scalar(self.SM_coeffs, t_shifted)
+        u_Ct_ref = approx_scalar(self.Ct_coeffs, t_shifted)
+        u_EM_ref = approx_scalar(self.EM_coeffs, t_shifted)
+        u_GR_ref = approx_scalar(self.GR_coeffs, t_shifted)
+        _f_part = (u[0] - u[1] - u[2] - u[3] - u[4]) ** 2 + \
+               (u[1] - u_SM_ref) ** 2 + \
+               (u[2] - u_Ct_ref) ** 2 + \
+               (u[3] - u_EM_ref) ** 2 + \
+               (u[4] - u_GR_ref) ** 2
 
-        # for i in range(0, self.n_mcs):
-        #     _f_i = np.full_like(_f, 0)
-        #     for j in range(0, self.n_mcs):
-        #         if self.to_optimize[i,j]:
-        #             _f_i = _f_i - U[i,j] * control_mask(self.n_states, i, j)
-        #         if self.to_optimize[j,i]:
-        #             _f_i = _f_i + U[j,i] * control_mask(self.n_states, j, i)
-        #     _f = _f + _f_i**2
+        _f = _f + _f_part
 
         penalty = 1e5
         for i in range(0, self.n_mcs):
@@ -108,26 +110,54 @@ class GoulburnSimpleModel(ControlledSystem):
 
 
     def A(self, mc_num, t, U):
-        return _A(self.n_states[mc_num], mc_num, t, U, self.to_optimize)
+        if mc_num == 0: # Eildon
+            return _A_Eildon(self.n_states[mc_num], U[0,1] * self.drE, approx_scalar(self.RF_coeffs, t+self.time_shift) * self.drE)
+        elif mc_num == 1: # Goulburn
+            return _A_Goulburn(self.n_states[mc_num], U[0,1] * self.drG, control_out(mc_num, U, self.to_optimize) * self.drG)
+        else:
+            return np.zeros((1, 1))
 
 
-
-#@jit
-def _A(n, mc_num, t, U, to_optimize):
+@jit
+def _A_Eildon(n, u_toGoulburn, lambda_fromRainfall):
     a = np.zeros((n, n))
-    if mc_num == 0 : # Eildon
-        for i in range(1, n):
-            a[i, i - 1] = control_out(mc_num, U, to_optimize) * drE
-            a[i, i] = a[i, i] - a[i, i - 1]
-            a[i - 1, i] = approx(all_params['Rainfall'], np.array(t+time_shift)) * drE
-            a[i - 1, i - 1] = a[i - 1, i - 1] - a[i - 1, i]
-    if mc_num == 1 : # Goulburn
-        for i in range(1, n):
-            a[i, i - 1] = control_out(mc_num, U, to_optimize) * drG
-            a[i, i] = a[i, i] - a[i, i - 1]
-            a[i - 1, i] = control_in(mc_num, U, to_optimize) * drG
-            a[i - 1, i - 1] = a[i - 1, i - 1] - a[i - 1, i]
+    for i in range(1, n):
+        a[i, i - 1] = u_toGoulburn
+        a[i, i] = a[i, i] - a[i, i - 1]
+        a[i - 1, i] = lambda_fromRainfall
+        a[i - 1, i - 1] = a[i - 1, i - 1] - a[i - 1, i]
     return a
+
+
+@jit
+def _A_Goulburn(n, u_toGoulburn, u_fromGoulburn):
+    a = np.zeros((n, n))
+    for i in range(1, n):
+        a[i, i - 1] = u_fromGoulburn
+        a[i, i] = a[i, i] - a[i, i - 1]
+        a[i - 1, i] = u_toGoulburn
+        a[i - 1, i - 1] = a[i - 1, i - 1] - a[i - 1, i]
+    return a
+
+
+# @jit
+# def _A(n, mc_num, t, U, to_optimize):
+#     a = np.zeros((n, n))
+#     if mc_num == 0 : # Eildon
+#         for i in range(1, n):
+#             a[i, i - 1] = control_out(mc_num, U, to_optimize) * drE
+#             a[i, i] = a[i, i] - a[i, i - 1]
+#             a[i - 1, i] = approx_scalar(RF_coeffs, t+time_shift) * drE
+#             a[i - 1, i - 1] = a[i - 1, i - 1] - a[i - 1, i]
+#     if mc_num == 1 : # Goulburn
+#         for i in range(1, n):
+#             a[i, i - 1] = control_out(mc_num, U, to_optimize) * drG
+#             a[i, i] = a[i, i] - a[i, i - 1]
+#             a[i - 1, i] = control_in(mc_num, U, to_optimize) * drG
+#             a[i - 1, i - 1] = a[i - 1, i - 1] - a[i - 1, i]
+#     return a
+
+
 
 @jit
 def control_out(i, U, to_optimize):  # i - MC number
