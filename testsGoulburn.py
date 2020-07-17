@@ -12,7 +12,7 @@ show_output = False
 
 do_recalculate = False
 do_probabilities = False
-do_pics_by_state = False
+do_pics_by_state = True
 do_pics_averages = True
 
 

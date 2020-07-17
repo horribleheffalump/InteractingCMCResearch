@@ -1,6 +1,11 @@
 from DELWPdata.DataImport import *
 from DELWPdata.DataApproximations import *
 from matplotlib import gridspec
+from matplotlib import rc
+
+rc('font',**{'family':'serif'})
+rc('text', usetex=True)
+rc('text.latex',unicode=True)
 
 #recalc = False
 
@@ -70,7 +75,7 @@ for s in all_series:
     all_params.update({s : np.load(filename_template.replace('[param]', s))})
 
 plot_points =  np.arange(0.5, 1.5, 0.001)
-fig = plt.figure(figsize=(10, 8), dpi=200)
+fig = plt.figure(figsize=(10, 6), dpi=150)
 gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1], width_ratios=[4, 1])
 
 ax = plt.subplot(gs[0, 0])
@@ -116,7 +121,7 @@ ax.legend(loc='lower left')
 fig.tight_layout()
 
 #plt.show()
-filename = f'{fig_path}discharges.png'
+filename = f'{fig_path}discharges.pdf'
 plt.tight_layout()
 plt.savefig(filename)
 plt.close(fig)

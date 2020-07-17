@@ -12,11 +12,11 @@ from functools import partial
 from multiprocessing import Pool
 from time import time, strftime, localtime, gmtime
 
-# from matplotlib import rc
-#
-# rc('font',**{'family':'serif'})
-# rc('text', usetex=True)
-# rc('text.latex',unicode=True)
+from matplotlib import rc
+
+rc('font',**{'family':'serif'})
+rc('text', usetex=True)
+rc('text.latex',unicode=True)
 
 # tol_constraints = 1e-10
 # consts=[]
@@ -317,7 +317,7 @@ class ControlledSystem(ABC):
         mc_count_toplot = len(labels_toplot)
         n_states_toplot = [i for i in self.n_states if i > 1]
 
-        fig = plt.figure(figsize=(10, 8), dpi=200)
+        fig = plt.figure(figsize=(10, 6), dpi=150)
         gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1], width_ratios=[4, 1])
         #gs.update(left=0.05, bottom=0.07, right=0.98, top=0.99, wspace=0.15, hspace=0.16)
 
@@ -384,7 +384,7 @@ class ControlledSystem(ABC):
         ax.legend(loc='lower left')
         ax.set_axis_off()
 
-        filename = f'{path}state_{"_".join(str(x) for x in state)}.png'
+        filename = f'{path}state_{"_".join(str(x) for x in state)}.pdf'
         plt.tight_layout()
         plt.savefig(filename)
         plt.close(fig)
@@ -407,7 +407,7 @@ class ControlledSystem(ABC):
     def pics_averages(self, path, legend_pos='lower right', x_ticks=[], x_labels=[]):
         mc_count_toplot = len([s for s in self.mc_names if s != ''])
         n_states_toplot = [i for i in self.n_states if i > 1]
-        fig = plt.figure(figsize=(8, 4), dpi=200)
+        fig = plt.figure(figsize=(10, 3), dpi=150)
         #ax = plt.subplot(plt.gca())
         gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1])
 
@@ -435,7 +435,7 @@ class ControlledSystem(ABC):
         ax.legend(loc='lower left')
 
         plt.tight_layout()
-        plt.savefig(f'{path}average.png')
+        plt.savefig(f'{path}average.pdf')
         plt.close(fig)
 
     def slice2dphi(self, slice):
