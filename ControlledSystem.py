@@ -12,12 +12,20 @@ from functools import partial
 from multiprocessing import Pool
 from time import time, strftime, localtime, gmtime
 
+# from matplotlib import rc
+#
+# rc('font',**{'family':'serif'})
+# rc('text', usetex=True)
+# rc('text.latex',unicode=True)
+
 # tol_constraints = 1e-10
 # consts=[]
 # consts.append(
 #     {'type': 'ineq', 'fun': lambda u: -np.abs(u[0] * u[1]) + tol_constraints})
 # consts.append(
 #     {'type': 'ineq', 'fun': lambda u: -np.abs(u[2] * u[3]) + tol_constraints})
+from DELWPdata.DataApproximations import moving_averages
+
 
 def proc(idx, t, phi, controlled_system):
     res = minimize(lambda x: controlled_system.H(t, phi, controlled_system.v2m(x))[idx], controlled_system.init, bounds=controlled_system.bounds,
@@ -47,7 +55,7 @@ class ControlledSystem(ABC):
     Defines a system of dependent Markov chains.
     The interaction between MC's is only through the control parameters U which are shared between the MCs
     '''
-    def __init__(self, n_states, controls_to_optimize, controls_lb, controls_ub, control_names):
+    def __init__(self, n_states, controls_to_optimize, controls_lb, controls_ub, mc_names, control_names):
         '''
         Constructor
         :param n_states: list of number of states of MCs. E.g., [3,4,5] defines 3 MCs with number of states 3,4 and 5 respectively.
@@ -65,8 +73,6 @@ class ControlledSystem(ABC):
         self.to_optimize = controls_to_optimize
         self.lb = controls_lb
         self.ub = controls_ub
-        self.names = control_names
-        self.colors = ['red', 'green', 'blue', 'cyan', 'magenta', 'yellow']
 
         self.values = []
         self.controls = []
@@ -92,6 +98,12 @@ class ControlledSystem(ABC):
         self.T = np.nan
         self.delta = np.nan
         self.time_mesh = []
+
+        # plotting parameters
+        self.mc_names = mc_names
+        self.control_names = control_names
+        self.colors = ['blue', 'green', 'cyan', 'magenta', 'yellow', 'red', 'navy']
+
 
     @abstractmethod
     def A(self, mc_num, t, U):
@@ -158,7 +170,7 @@ class ControlledSystem(ABC):
         path = np.zeros((len(times), self.n_mcs))
         path[0, ] = x0
         for idt, t in enumerate(times):
-            if t > 0:
+            if idt > 0:
                 previous_state = [int(i) for i in path[idt-1,]]
                 control_v = controls[idt,][tuple(previous_state)]
                 U = self.v2m(control_v)
@@ -265,7 +277,7 @@ class ControlledSystem(ABC):
         p_theor[tuple(start_state)] = 1.0
 
         for idt, t in enumerate(self.time_mesh):
-            if t>0:
+            if idt > 0:
                 generator = np.full(np.repeat(self.n_states, 2), np.nan)
                 for idp1, _ in np.ndenumerate(p_theor):
                     selection = tuple([item for sublist in ([slice(None), idp1[i]] for i in range(0,self.n_mcs)) for item in sublist])
@@ -294,44 +306,86 @@ class ControlledSystem(ABC):
         p_MC = p_theor
 
         for idt, t in enumerate(self.time_mesh):
-            if t>0:
+            if idt > 0:
                 p_MC = np.zeros(self.n_states)
                 for idp, _ in np.ndenumerate(p_MC):
                     p_MC[idp] = 1.0 - np.count_nonzero(np.linalg.norm(paths[:,idt,:]-np.array(idp), axis=1))/N
             self.probs_joint_MC[idt] = p_MC
 
-    def plot_value_control(self, state, times, values, probabilities_theor, probabilities_MC, controls, path):
-        fig = plt.figure(figsize=(6, 6), dpi=200)
-        gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1])
+    def plot_value_control(self, state, times, values, probabilities_theor, probabilities_MC, controls, path, legend_pos, x_ticks, x_labels):
+        labels_toplot = [s for s in self.mc_names if s != '']
+        mc_count_toplot = len(labels_toplot)
+        n_states_toplot = [i for i in self.n_states if i > 1]
+
+        fig = plt.figure(figsize=(10, 8), dpi=200)
+        gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1], width_ratios=[4, 1])
         #gs.update(left=0.05, bottom=0.07, right=0.98, top=0.99, wspace=0.15, hspace=0.16)
 
-        ax = plt.subplot(gs[0])
+        ax = plt.subplot(gs[0,0])
         ax.plot(times, probabilities_theor, label='probability', color='red')
         ax.plot(times, probabilities_MC, color='red', linestyle=':')
         ax.set_ylim(0,1)
-        ax.legend(loc='upper left')
+        ax.get_xaxis().set_visible(False)
+        ax.set_ylabel('Probability of state')
+
+        #ax.legend(loc='upper left')
         ax_ = plt.twinx(ax)
-        ax_.plot(times, values, label='value') 
-        ax_.legend(loc='upper right')
+        ax_.plot(times, values, label='value', color='navy')
+        ax_.set_ylabel('Value function')
+        #ax_.legend(loc='upper right')
 
+        ax = plt.subplot(gs[0,1]) #labels upper plot
+        ax.plot([], [], label='Probability', color='red')
+        ax.plot([], [], label='Value function', color='navy')
+        ax.legend(loc='upper left')
+        ax.set_axis_off()
 
-
-        ax = plt.subplot(gs[1])
+        ax = plt.subplot(gs[1,0])
         for k in range(0, controls.shape[1]):
-            ax.plot(times, controls[:,k], label=self.names[k])
-        ax.legend(loc='upper left')
-        ax.set_ylim(np.min(self.lb[self.to_optimize])-0.5,np.max(self.ub[self.to_optimize])+0.5)
-        ax.set_title(f'{state}', y=-0.01)
+            ax.plot(times, moving_averages(controls[:,k], 10), label=self.control_names[k])
+        #ax.legend(loc='upper left')
+        c_min = np.min(self.lb[self.to_optimize])
+        c_max = np.max(self.ub[self.to_optimize])
+        diff = c_max-c_min
+        ax.set_ylim(c_min-0.05*diff, c_max+0.05*diff)
+        if (len(x_ticks)> 0):
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels(x_labels)
+
+        ax.set_ylabel('Control values')
+
+        title = 'States: ' + ', '.join([f'{t[0]} - {t[1]}' for t in zip(labels_toplot, state)])
+        ax.set_title(title, y=-0.15)
+        #ax.legend(loc=legend_pos)
 
         ax_ = plt.twinx(ax)
-        tsize = (np.max(times) - np.min(times))/self.n_mcs
-        t = [np.min(times) + tsize*x for x in [val for val in range(0, self.n_mcs+1) for _ in (0, 1)][1:-1]]
-        x = [val+1 for val in state for _ in (0, 1)]
-        #x = [state[0]+1, state[0]+1, state[1]+1, state[1]+1, state[2]+1, state[2]+1]
-        ax_.fill_between(t,x, alpha=0.5)
-        ax_.set_axis_off()
+        # tsize = (np.max(times) - np.min(times))/self.n_mcs
+        # t = [np.min(times) + tsize*x for x in [val for val in range(0, self.n_mcs+1) for _ in (0, 1)][1:-1]]
+        # x = [val+1 for val in state for _ in (0, 1)]
+        # ax_.fill_between(t,x, alpha=0.5)
+
+        for i in range(0, self.n_mcs):
+            if (self.mc_names[i] != ''):
+                bar_heights = np.zeros_like(n_states_toplot)
+                bar_heights[i] = self.n_states[i]
+                ax_.bar(np.arange(0, 1, 1.0 / mc_count_toplot) + 0.5 / mc_count_toplot, bar_heights, color='white', edgecolor=self.colors[i],
+                       width=0.7 / mc_count_toplot, alpha=0.3)
+                bar_heights[i] = state[i]+1
+                ax_.bar(np.arange(0, 1, 1.0 / mc_count_toplot) + 0.5 / mc_count_toplot, bar_heights, color=self.colors[i],
+                       width=0.7 / mc_count_toplot, alpha=0.3)
+
+        #ax_.set_axis_off()
+        ax_.set_ylabel('State number')
         ax_.set_ylim(0, np.max(self.n_states)+1)
+
+        ax = plt.subplot(gs[1,1]) #labels lower plot
+        for k in range(0, controls.shape[1]):
+            ax.plot([], [], label=self.control_names[k])
+        ax.legend(loc='lower left')
+        ax.set_axis_off()
+
         filename = f'{path}state_{"_".join(str(x) for x in state)}.png'
+        plt.tight_layout()
         plt.savefig(filename)
         plt.close(fig)
 
@@ -339,7 +393,7 @@ class ControlledSystem(ABC):
         for idx, control, val in slice:
             print(idx, self.v2print(control), val) #, cons1(res.x), cons2(res.x))
 
-    def pics_plots(self, path):
+    def pics_plots(self, path, legend_pos='lower right', x_ticks=[], x_labels=[]):
         for idx, _ in np.ndenumerate(np.zeros(self.n_states)):
             self.plot_value_control(idx,
                                     self.time_mesh,
@@ -347,15 +401,40 @@ class ControlledSystem(ABC):
                                     self.probs_joint_theor[tuple([slice(None)]+list(idx))],
                                     self.probs_joint_MC[tuple([slice(None)]+list(idx))],
                                     self.controls[tuple([slice(None)]+list(idx)+[slice(None)])],
-                                    path)
+                                    path,
+                                    legend_pos, x_ticks, x_labels)
 
-    def pics_averages(self, path):
-        fig = plt.figure(figsize=(6, 6), dpi=200)
-        ax = plt.subplot(plt.gca())
+    def pics_averages(self, path, legend_pos='lower right', x_ticks=[], x_labels=[]):
+        mc_count_toplot = len([s for s in self.mc_names if s != ''])
+        n_states_toplot = [i for i in self.n_states if i > 1]
+        fig = plt.figure(figsize=(8, 4), dpi=200)
+        #ax = plt.subplot(plt.gca())
+        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1])
+
+        ax = plt.subplot(gs[0, 0])
         for i in range(0, self.n_mcs):
-            ax.plot(self.time_mesh, self.average_levels_theor[:, i], label=f'MC {i}', color=self.colors[i])
-            ax.plot(self.time_mesh, self.average_levels_MC[:, i], linestyle=':', color=self.colors[i])
-        ax.legend()
+            if (self.mc_names[i] != ''):
+                ax.plot(self.time_mesh, 1 + self.average_levels_theor[:, i], label=self.mc_names[i], color=self.colors[i])
+                ax.plot(self.time_mesh, 1 + self.average_levels_MC[:, i], linestyle=':', color=self.colors[i])
+                bar_heights = np.zeros_like(n_states_toplot)
+                bar_heights[i] = self.n_states[i]
+                ax.bar(np.arange(0, 1, 1.0/mc_count_toplot) + 0.5/mc_count_toplot, bar_heights, color=self.colors[i], width=0.7/mc_count_toplot, alpha=0.3)
+
+        ax.set_ylim(0, np.max(self.n_states)+1)
+        if (len(x_ticks)> 0):
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels(x_labels)
+        #ax.legend(loc=legend_pos)
+        ax.set_ylabel('Average state')
+
+        ax = plt.subplot(gs[0, 1])
+        for i in range(0, self.n_mcs):
+            if (self.mc_names[i] != ''):
+                ax.plot([], [], label=self.mc_names[i], color=self.colors[i])
+        ax.set_axis_off()
+        ax.legend(loc='lower left')
+
+        plt.tight_layout()
         plt.savefig(f'{path}average.png')
         plt.close(fig)
 

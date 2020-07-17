@@ -25,8 +25,8 @@ def import_data(filename, title, col, start, drop_q=[255, 180, 153, 160]):
 
 
 def import_rainfall(filename, start):
-    headers = ['year', 'month', 'day', 'rainfall']
-    dtypes = {'year': 'int', 'month': 'int', 'day': 'int', 'rainfall': 'float'}
+    headers = ['year', 'month', 'day', 'Rainfall']
+    dtypes = {'year': 'int', 'month': 'int', 'day': 'int', 'Rainfall': 'float'}
     data = pd.read_csv(filename, sep=',', usecols=[2, 3, 4, 5], skiprows=start, header=None, names=headers,
                        dtype=dtypes)
     data['Datetime'] = list(

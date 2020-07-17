@@ -76,11 +76,12 @@ class GoulburnSimpleModel(ControlledSystem):
         self.drE = n_states_Eildon / capacity_Eildon * 365
         self.drG = n_states_Goulburn / capacity_Goulburn * 365
 
-        control_labels = ['Eildon', 'Stuart Murrey', 'Cattanach', 'East Main', 'Goulburn river']
+        dams_labels = ['Eildon', 'Nagambie', '', '', '', '']
+        control_labels = ['Goulburn higher', 'Stuart Murrey', 'Cattanach', 'East Main', 'Goulburn lower']
 
         self.time_shift = 0.5
 
-        super().__init__(n_states, to_optimize, lb, ub, control_labels)
+        super().__init__(n_states, to_optimize, lb, ub, dams_labels, control_labels)
 
 
 

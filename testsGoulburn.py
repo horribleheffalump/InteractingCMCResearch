@@ -10,16 +10,16 @@ np.set_printoptions(precision=3, suppress=True)
 work_dir = 'D:\\projects.git\\InteractingCMCResearch\\output\\'
 show_output = False
 
-do_recalculate = True
-do_probabilities = True
-do_pics_by_state = True
+do_recalculate = False
+do_probabilities = False
+do_pics_by_state = False
 do_pics_averages = True
 
 
 
-n_states = [4, 4, 1, 1, 1, 1]
-desirable_state = [2, 2, 0, 0, 0, 0]
-start_state = [2, 2, 0, 0, 0, 0]
+n_states = [10, 10, 1, 1, 1, 1]
+desirable_state = [8, 8, 0, 0, 0, 0]
+start_state = [8, 8, 0, 0, 0, 0]
 
 dams = GoulburnSimpleModel(n_states)
 
@@ -49,10 +49,13 @@ if __name__ == '__main__':
     else:
         dams.load_results(work_dir)
 
+    x_ticks = np.arange(0,1, 1.0/12) + 1.0/24
+    x_labels = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+
     if do_pics_by_state:
-        dams.pics_plots(work_dir)
+        dams.pics_plots(work_dir, x_ticks=x_ticks, x_labels=x_labels)
     if do_pics_averages:
-        dams.pics_averages(work_dir)
+        dams.pics_averages(work_dir, x_ticks=x_ticks, x_labels=x_labels)
 
 
 
