@@ -74,9 +74,14 @@ all_params = {}
 for s in all_series:
     all_params.update({s : np.load(filename_template.replace('[param]', s))})
 
+
+x_ticks = np.arange(0.5,1.5, 1.0/12) + 1.0/24
+x_labels = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+
 plot_points =  np.arange(0.5, 1.5, 0.001)
-fig = plt.figure(figsize=(10, 6), dpi=150)
-gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1], width_ratios=[4, 1])
+fig = plt.figure(figsize=(10, 3), dpi=150)
+#gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1], width_ratios=[4, 1])
+gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1])
 
 ax = plt.subplot(gs[0, 0])
 ax.plot(plot_points, approx(all_params['Rainfall'], plot_points), label=s, color='red')
@@ -86,8 +91,9 @@ ax.scatter(data_year_dropped.index.values + 0.5,
 
 ax.set_ylabel('Rainfall water income [Ml/day]')
 
-ax.get_xaxis().set_visible(False)
-
+#ax.get_xaxis().set_visible(False)
+ax.set_xticks(x_ticks)
+ax.set_xticklabels(x_labels)
 #ax1.legend(loc='upper center')
 
 ax = plt.subplot(gs[0, 1]) # legend
@@ -95,7 +101,21 @@ ax.plot([], [], label='Rainfall', color='red')
 ax.set_axis_off()
 ax.legend(loc='upper left')
 
-ax = plt.subplot(gs[1, 0])
+
+
+fig.tight_layout()
+
+#plt.show()
+filename = f'{fig_path}rainfall.pdf'
+plt.tight_layout()
+plt.savefig(filename)
+plt.close(fig)
+
+
+fig = plt.figure(figsize=(10, 3), dpi=150)
+gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1])
+#ax = plt.subplot(gs[1, 0])
+ax = plt.subplot(gs[0, 0])
 for s in discharges_approx:
     ax.plot(plot_points, approx(all_params[s], plot_points), label=s)
     ax.scatter(data_year_dropped.index.values + 0.5,
@@ -103,15 +123,14 @@ for s in discharges_approx:
 
 ax.set_ylabel('Discharges [Ml/day]')
 
-x_ticks = np.arange(0.5,1.5, 1.0/12) + 1.0/24
-x_labels = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
 
 ax.set_xticks(x_ticks)
 ax.set_xticklabels(x_labels)
 
 #ax1.legend(loc='upper center')
 
-ax = plt.subplot(gs[1, 1]) # legend
+#ax = plt.subplot(gs[1, 1]) # legend
+ax = plt.subplot(gs[0, 1]) # legend
 for s, correct_name in (zip(discharges_approx, ['Goulburn higher', 'Stuart Murrey', 'Cattanach', 'East Main', 'Goulburn lower'])):
     ax.plot([], [], label=correct_name)
 ax.set_axis_off()

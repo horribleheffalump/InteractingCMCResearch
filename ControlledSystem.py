@@ -354,8 +354,8 @@ class ControlledSystem(ABC):
 
         ax.set_ylabel('Control values')
 
-        title = 'States: ' + ', '.join([f'{t[0]} - {t[1]}' for t in zip(labels_toplot, state)])
-        ax.set_title(title, y=-0.15)
+        title = 'States: ' + ', '.join([f'{t[0]} - {t[1]+1}' for t in zip(labels_toplot, state)])
+        #ax.set_title(title, y=-0.15)
         #ax.legend(loc=legend_pos)
 
         ax_ = plt.twinx(ax)
