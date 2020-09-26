@@ -1,3 +1,4 @@
+from numba import jit
 import numpy as np
 from scipy.optimize import minimize
 
@@ -5,8 +6,6 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
 import os
-
-from abc import ABC, abstractmethod
 
 from functools import partial
 from multiprocessing import Pool
@@ -28,10 +27,18 @@ from DELWPdata.DataApproximations import moving_averages
 
 
 def proc(idx, t, phi, controlled_system):
-    res = minimize(lambda x: controlled_system.H(t, phi, controlled_system.v2m(x))[idx], controlled_system.init, bounds=controlled_system.bounds,
-                   constraints=[{'type': 'ineq', 'fun': lambda u: -np.abs(u[p[0]] * u[p[1]]) + controlled_system.tol_constraints} for p in controlled_system.incompatible_control_pairs])  # , options={'disp':True}, method='SLSQP')
-    # res = minimize(lambda x: controlled_system.H_indexed(t, phi, controlled_system.v2m(x), idx), controlled_system.init, bounds=controlled_system.bounds,
-    #                constraints=[{'type': 'ineq', 'fun': lambda u: -np.abs(u[p[0]] * u[p[1]]) + controlled_system.tol_constraints} for p in controlled_system.incompatible_control_pairs])  # , options={'disp':True}, method='SLSQP')
+    # res = minimize(lambda x: controlled_system.H(t, phi, controlled_system.v2m(x))[idx], controlled_system.init,
+    #                jac=lambda x: np.array([controlled_system.H(t, phi, controlled_system.v2m(np.array([1.0, 0.0, 0.0])))[idx],
+    #                              controlled_system.H(t, phi, controlled_system.v2m(np.array([0.0, 1.0, 0.0])))[idx],
+    #                              controlled_system.H(t, phi, controlled_system.v2m(np.array([0.0, 0.0, 1.0])))[idx]]),
+    #                bounds=controlled_system.bounds,
+    #                #options={'disp':True}
+    #                )  # , options={'disp':True}, method='SLSQP')
+    res = minimize(lambda x: controlled_system.H_indexed(t, phi, controlled_system.v2m(x), idx), controlled_system.init,
+                   bounds=controlled_system.bounds,
+                   #options={'disp':True}
+                   )  # , options={'disp':True}, method='SLSQP')
+
     return idx, res.x, res.fun
 
 
@@ -52,11 +59,23 @@ def cronsum(A):
     return res
 
 
-class ControlledSystem(ABC):
+def select_slice_by_dimension(shape, dim, slice_num):
+    idx = [slice(None)] * dim + [slice_num] + [slice(None)] * (len(shape) - dim - 1)
+    return tuple(idx)
+
+
+def control_mask(shape, i1, i2):
+    mask = np.ones(shape)
+    mask[select_slice_by_dimension(shape, i1, 0)] = 0
+    mask[select_slice_by_dimension(shape, i2, -1)] = 0
+    return mask
+
+
+class ControlledDamsSimplified():
     '''
-    Defines a system of dependent Markov chains.
-    The interaction between MC's is only through the control parameters U which are shared between the MCs
+    Defines a system of connected dams.
     '''
+
     def __init__(self, n_states, controls_to_optimize, controls_lb, controls_ub, mc_names, control_names):
         '''
         Constructor
@@ -85,17 +104,9 @@ class ControlledSystem(ABC):
         self.average_levels_MC = []
 
         # control optimization parameters
-        self.init = self.m2v(self.lb) # initial approximation for the iterative optimization procedure
-        self.bounds = tuple([(self.m2v(self.lb)[i], self.m2v(self.ub)[i]) for i in range(0, len(self.m2v(self.lb)))]) # upper and lower control bounds in tuple form
-
-        # define control pairs which can not be nonzero at the same time. These are all U[i,j] and U[j,i], where i != j and to_optimize[i,j]=to_optimize[j,i] = True
-        self.tol_constraints = 1e-10
-        temp_U = np.fromfunction(lambda i,j: i+j, (self.n_mcs, self.n_mcs))
-        temp_v = self.m2v(temp_U)
-        if np.any(np.unique(temp_v) != temp_v):
-            self.incompatible_control_pairs = [[i for i, x in enumerate(temp_v) if x == item] for item in set(temp_v)]
-        else:
-            self.incompatible_control_pairs = []
+        self.init = self.m2v(self.lb)   # initial approximation for the iterative optimization procedure
+        self.bounds = tuple([(self.m2v(self.lb)[i], self.m2v(self.ub)[i]) for i in
+                             range(0, len(self.m2v(self.lb)))])  # upper and lower control bounds in tuple form
 
         # time mesh parameters
         self.T = np.nan
@@ -107,45 +118,7 @@ class ControlledSystem(ABC):
         self.control_names = control_names
         self.colors = ['blue', 'green', 'cyan', 'magenta', 'yellow', 'red', 'navy']
 
-
-    @abstractmethod
-    def A(self, mc_num, t, U):
-        '''
-        Markov chains' generators' generator
-        :param mc_num: Markov chain number
-        :param t: time
-        :param U: control matrix
-        :return: MC generator (transposed intensity matrix)
-        e.g. [[-lambda, lambda, 0], [mu, -lambda-mu, lambda], [0, mu, -mu]]
-        Note, that in fact this is a transposed generator,
-        so to use it in the Kolmogorov equation, we have to transpose it once again
-        '''
-        pass
-
-    @abstractmethod
-    def f(self, t, U):
-        '''
-        Instant loss function for control optimization
-        :param t: time
-        :param U: control matrix
-        :return: losses tensor f[i1,i2,....]: instant losses at time t in state [i1,i2,....]
-        '''
-        pass
-
-    def H(self, t, phi, U):
-        '''
-        Hamiltonian of the dynamic programing equation in tensor form <d(phi), X>/dt = - min_u H(t, phi, U, X)
-        :param t: time
-        :param phi: tensor phi[i1,i2,....] of value function values at time t in state [i1,i2,....]
-        :param U: control matrix
-        :return: Hamiltonian in tensor form H[i1,i2,....]
-        '''
-        # A_full = self.Generator_transposed(t, U)
-        # h = np.tensordot(A_full, phi, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case
-        A_full = self.Generator_full(t, U)
-        h = np.tensordot(A_full, phi, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case (the same as [1,3,5][0,1,2] for the generator constructed from the transposed matrices)
-        h = h + self.f(t, U)
-        return h
+        self.h_calls = 0
 
     def H_indexed(self, t, phi, U, index):
         '''
@@ -167,7 +140,28 @@ class ControlledSystem(ABC):
             A_i[tuple(A_i_index)] = self.A(i, t, U)[index[i],:]
             A_index = A_index + A_i
         h_index = np.sum(phi*A_index)
-        return h_index + self.f(t, U)[index]
+
+        #print(h_index - h[index])
+
+        return h_index
+
+
+    def H(self, t, phi, U):
+        '''
+        Hamiltonian of the dynamic programing equation in tensor form <d(phi), X>/dt = - min_u H(t, phi, U, X)
+        :param t: time
+        :param phi: tensor phi[i1,i2,....] of value function values at time t in state [i1,i2,....]
+        :param U: control matrix
+        :return: Hamiltonian in tensor form H[i1,i2,....]
+        '''
+        # A_full = self.Generator_transposed(t, U)
+        # h = np.tensordot(A_full, phi, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case
+        A_full = self.Generator_full(t, U)
+        h = np.tensordot(A_full, phi, axes=(list(range(0, 2 * self.n_mcs, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [0,2,4][0,1,2] for 3 MC case (the same as [1,3,5][0,1,2] for the generator constructed from the transposed matrices)
+        #h = h + self.f(t, U)
+        self.h_calls = self.h_calls + 1
+        return h
+
 
     def Generator_full(self, t, U):
         '''
@@ -266,7 +260,7 @@ class ControlledSystem(ABC):
         self.delta = delta
         self.time_mesh = np.arange(T, 0.0 - delta / 2, -delta) # backward time_mesh
 
-        pool = Pool(processes=8)
+        pool = Pool(processes=7)
         phi = self.terminal(desirable_state, 2)
         phi_enumerate = [x[0] for x in list(np.ndenumerate(phi))]
         self.values = np.zeros([self.time_mesh.shape[0]] + self.n_states)
@@ -275,7 +269,24 @@ class ControlledSystem(ABC):
         time_start = time()
         for idt, t in enumerate(self.time_mesh):
             slice = pool.map(partial(proc, t=t, phi=phi, controlled_system=self), phi_enumerate)
-            #slice = map(partial(proc, t=t, phi=phi, controlled_system=self), phi_enumerate)
+            # slice = map(partial(proc, t=t, phi=phi, controlled_system=self), phi_enumerate)
+
+            # def proc(idx):
+            #     res = minimize(lambda x: self.H(t, phi, self.v2m(x))[idx], self.init,
+            #              jac=lambda x: np.array(
+            #                  [self.H(t, phi, self.v2m(np.array([1.0, 0.0, 0.0])))[idx],
+            #                   self.H(t, phi, self.v2m(np.array([0.0, 1.0, 0.0])))[idx],
+            #                   self.H(t, phi, self.v2m(np.array([0.0, 0.0, 1.0])))[idx]]),
+            #              bounds=self.bounds,
+            #              # options={'disp':True}
+            #              )
+            #     return idx, res.x, res.fun
+
+            #slice = map(proc, phi_enumerate)
+            print(self.h_calls)
+
+            # , options={'disp':True}, method='SLSQP')
+
             phi = phi + delta * self.slice2dphi(slice)
             time_elapsed = time() - time_start
             time_step_average = time_elapsed / (idt + 1)
@@ -307,17 +318,17 @@ class ControlledSystem(ABC):
                 for idp1, _ in np.ndenumerate(p_theor):
                     selection = tuple([item for sublist in ([slice(None), idp1[i]] for i in range(0,self.n_mcs)) for item in sublist])
                     #generator[idp1[0], :, idp1[1], :, idp1[2], :] = self.Generator_full(t, self.v2m(self.controls[idt,][idp1]))[idp1[0], :, idp1[1], :, idp1[2], :] # for 3 MCs
-                    # generator calculation dumb but fast (at least for higher number of chains)
-                    # A_index = np.zeros(self.n_states)
-                    # for i in range(0, len(self.n_states)):
-                    #     A_i = np.zeros(self.n_states)
-                    #     A_i_index = list(idp1)
-                    #     A_i_index[i] = slice(None)
-                    #     A_i[tuple(A_i_index)] = self.A(i, t, self.v2m(self.controls[idt,][idp1]))[idp1[i], :]
-                    #     A_index = A_index + A_i
-                    # generator[selection] = A_index
+                    # generator calculation dumb but fast
+                    A_index = np.zeros(self.n_states)
+                    for i in range(0, len(self.n_states)):
+                        A_i = np.zeros(self.n_states)
+                        A_i_index = list(idp1)
+                        A_i_index[i] = slice(None)
+                        A_i[tuple(A_i_index)] = self.A(i, t, self.v2m(self.controls[idt,][idp1]))[idp1[i], :]
+                        A_index = A_index + A_i
+                    generator[selection] = A_index
                     # generator calculation smart but slow
-                    generator[selection] = self.Generator_full(t, self.v2m(self.controls[idt,][idp1]))[selection]
+                    # generator[selection] = self.Generator_full(t, self.v2m(self.controls[idt,][idp1]))[selection]
                 p_theor = p_theor + (t - self.time_mesh[idt-1]) * np.tensordot(generator, p_theor, axes=(list(range(1, 2 * self.n_mcs + 1, 2)), list(range(0, self.n_mcs)))) # axes, e.g., [1,3,5][0,1,2] for 3 MC case
             self.probs_joint_theor[idt] = p_theor
             self.average_levels_theor[idt,] = self.average_level(p_theor)
@@ -513,37 +524,117 @@ class ControlledSystem(ABC):
 
 
 
-# def pics_slice(slice, path):
-#     for idx, control, _ in slice:
-#         plot_stateandcontrol_3MCs(idx, v2m(control), path, max_level=np.max(n_states))
-# def plot_stateandcontrol_3MCs(state, control, path, max_level=3):
-#     fig = plt.figure(figsize=(6, 6), dpi=200)
-#     ax = fig.gca()
-#     t = [0,1,1,2,2,3]
-#     x = [state[0]+1, state[0]+1, state[1]+1, state[1]+1, state[2]+1, state[2]+1]
-#     mid_level = (max_level+1.0)/2.0
-#     ax.fill_between(t,x)
-#     tol_to_show = 1e-3
-#     if np.abs(control[1,0]) > tol_to_show:
-#         ax.arrow(1.25,mid_level,-0.5,0, color='red', head_width=0.05)
-#         ax.text(0.6, mid_level+0.1, f'{control[1,0]:.2f}')
-#     if np.abs(control[0,1]) > tol_to_show:
-#         ax.arrow(0.75,mid_level,0.5,0, color='red', head_width=0.05)
-#         ax.text(1.1, mid_level+0.1, f'{control[0,1]:.2f}')
-#     if np.abs(control[2,1]) > tol_to_show:
-#         ax.arrow(2.25,mid_level,-0.5,0, color='red', head_width=0.05)
-#         ax.text(1.6, mid_level+0.1, f'{control[2,1]:.2f}')
-#     if np.abs(control[1,2]) > tol_to_show:
-#         ax.arrow(1.75,mid_level,0.5,0, color='red', head_width=0.05)
-#         ax.text(2.1, mid_level+0.1, f'{control[1,2]:.2f}')
-#     ax.set_ylim(0, max_level+1)
-#     ax.set_xticks([0.5, 1.5, 2.5])
-#     ax.set_xticklabels(['1', '2', '3'])
-#     y_ticks = np.arange(1, max_level+1, 1)
-#     y_labels = ['']*len(y_ticks)
-#     y_labels[0] = 'min'
-#     y_labels[-1] = 'flood'
-#     ax.set_yticks(y_ticks)
-#     ax.set_yticklabels(y_labels)
-#     plt.savefig(f'{path}state_{state[0]}_{state[1]}_{state[2]}.png')
-#     plt.close(fig)
+
+    def f(self, t, U):
+        _f = np.zeros(np.array(self.n_states))
+        # for i in range(0, self.n_mcs):
+        #     _f_i = np.full_like(_f, lam(i, t) - mu(i, t) - omega(i, t))
+        #     for j in range(0, self.n_mcs):
+        #         if self.to_optimize[i,j]:
+        #             _f_i = _f_i - U[i,j] * control_mask(self.n_states, i, j)
+        #         if self.to_optimize[j,i]:
+        #             _f_i = _f_i + U[j,i] * control_mask(self.n_states, j, i)
+        #     _f = _f + _f_i**2
+
+        penalty = 1e5
+        for i in range(0, self.n_mcs):
+            for j in range(0, self.n_mcs):
+                if self.to_optimize[i, j]:
+                    _f = _f + penalty * U[i,j]**2 * np.abs(control_mask(self.n_states, i, j) - 1.0) # penalty for outbound control at "drought" states and inbound control at "flood" states
+        return _f
+
+
+    def A(self, mc_num, t, U):
+        a = np.zeros((self.n_states[mc_num], self.n_states[mc_num]))
+        for i in range(1, self.n_states[mc_num]):
+            if mc_num < U.shape[0] - 1:
+                a[i, i - 1] = U[mc_num, mc_num + 1]
+                a[i, i] = a[i, i] - a[i, i - 1]
+            if mc_num > 0:
+                a[i - 1, i] = U[mc_num - 1, mc_num]
+                a[i - 1, i - 1] = a[i - 1, i - 1] - a[i - 1, i]
+        return a
+
+
+
+
+    # @jit
+    # def lam(i, t):
+    #     if i == 0:
+    #         return -np.cos(2*np.pi*t) + 10
+    #     elif i == 1:
+    #         return -2*np.cos(2*np.pi*t) + 14
+    #     elif i == 2:
+    #         return -0.5*np.cos(2*np.pi*t) + 6
+    #     else:
+    #         return np.NaN
+    #
+    # @jit
+    # def mu(i, t):
+    #     if i == 0:
+    #         return np.sin(2*np.pi*t + 5/12*np.pi) + 3
+    #     elif i == 1:
+    #         return 2*np.sin(2*np.pi*t + 5/12*np.pi) + 6
+    #     elif i == 2:
+    #         return  0.5*np.sin(2*np.pi*t + 5/12*np.pi) + 2
+    #     else:
+    #         return np.NaN
+    #
+    # @jit
+    # def omega(i, t):
+    #     if i == 0:
+    #         return np.sin(2*np.pi*t + 1/4*np.pi) + 7
+    #     elif i == 1:
+    #         return 2*np.sin(2*np.pi*t + 1/4*np.pi) + 8
+    #     elif i == 2:
+    #         return 0.5*np.sin(2*np.pi*t + 1/4*np.pi) + 4
+    #     else:
+    #         return np.NaN
+
+    # def f(self, t, U): # for 3 MCs
+    #     _f = np.zeros(np.array(self.n_states))
+    #     f1 = np.full_like(_f, lam(0, t) - mu(0, t) - omega(0, t))
+    #     f1 = f1 - U[0,1] * control_mask(self.n_states, 0, 1)
+    #     f1 = f1 + U[1,0] * control_mask(self.n_states, 1, 0)
+    #     f1 = f1**2
+    #
+    #     f2 = np.full_like(_f, lam(1, t) - mu(1, t) - omega(1, t))
+    #     f2 = f2 + U[0,1] * control_mask(self.n_states, 0, 1)
+    #     f2 = f2 - U[1,0] * control_mask(self.n_states, 1, 0)
+    #     f2 = f2 + U[2,1] * control_mask(self.n_states, 2, 1)
+    #     f2 = f2 - U[1,2] * control_mask(self.n_states, 1, 2)
+    #     f2 = f2**2
+    #
+    #     f3 = np.full_like(_f, lam(2, t) - mu(2, t) - omega(2, t))
+    #     f3 = f3 - U[2,1] * control_mask(self.n_states, 2, 1)
+    #     f3 = f3 + U[1,2] * control_mask(self.n_states, 1, 2)
+    #     f3 = f3**2
+    #
+    #     _f = f1+f2+f3
+    #
+    #     penalty = 1e5
+    #     _f = _f + penalty * U[0,1]**2 * np.abs(control_mask(self.n_states, 0, 1) - 1.0) # penalty for outbound control at "drought" states and inbound control at "flood" states
+    #     _f = _f + penalty * U[1,0]**2 * np.abs(control_mask(self.n_states, 1, 0) - 1.0)
+    #     _f = _f + penalty * U[2,1]**2 * np.abs(control_mask(self.n_states, 2, 1) - 1.0)
+    #     _f = _f + penalty * U[1,2]**2 * np.abs(control_mask(self.n_states, 1, 2) - 1.0)
+    #
+    #     diff = np.linalg.norm(_f - self.f2(t,U))
+    #     if diff > 1e-5:
+    #         print(f'ACHTUNG {diff}')
+    #     return _f
+
+
+# def rhs(t, phi, U): # incorrect
+#     rhs = np.zeros_like(phi)
+#     for idx, x in np.ndenumerate(rhs):
+#         for i in range(0, len(idx)):
+#             select_slice = list(idx)
+#             select_slice[i] = slice(None)
+#             select_slice = tuple(select_slice)
+#             rhs[idx] = rhs[idx] + np.inner(A(i, t, control_in(i, U), control_out(i, U))[:, idx[i]], phi[select_slice])
+#     rhs = rhs + f(t, U)
+#     #rhs2 = rhs_tensor(t, phi, U)
+#     #print(np.abs(rhs-rhs2)<1e-10)
+#     return rhs
+
+
