@@ -21,8 +21,8 @@ class ControlledDams(ControlledSystem):
     '''
     Defines a system of connected dams.
     '''
-    def __init__(self, n_states, controls_to_optimize, controls_lb, controls_ub, control_names):
-        super().__init__(n_states, controls_to_optimize, controls_lb, controls_ub, control_names)
+    def __init__(self, n_states, controls_to_optimize, controls_lb, controls_ub, mc_names, control_names):
+        super().__init__(n_states, controls_to_optimize, controls_lb, controls_ub, mc_names, control_names)
 
 
     def f(self, t, U):
